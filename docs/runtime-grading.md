@@ -1,6 +1,10 @@
-# 런타임 채점 & 피드백 (LLM 통합)
+# 런타임 LLM — 채점 & 이해도 게이트
 
 > 관련: [데이터 모델](./data-model.md) · [파이프라인](./data-pipeline.md) · [알고리즘 개요](./learning-algorithm-overview.md)
+
+런타임 LLM(Gemini Flash-Lite)은 **두 용도**로 쓴다. 둘 다 ②(soul)가 베이크한 정답·해설·`elaboration`을 *적용*만 하며 콘텐츠를 생성하지 않는다.
+1. **다지기 채점** — 인출 답안을 `{score, reason}`으로 채점(아래 본문). S 갱신에 영향.
+2. **개념 이해도 게이트** — 자가설명을 보고 이해 충분 여부를 판정 + 형성 피드백([§ 개념 이해도 게이트](#개념-이해도-게이트-자가설명-확인)). **S 무관**, 저장 안 함.
 
 ## 결정: 채점은 **일괄적으로 경량 LLM에 위임**
 
@@ -115,6 +119,49 @@ grade(card, answer, wasPretest):
 - mcq는 절대 LLM에 보내지 않는다(서버 즉시 동등비교) → 호출 수 절감.
 - 같은 (cardId, normalizedAnswer) 판정은 **단기 캐시** 가능(동일 오답 반복 시 재호출 절감). 선택 최적화.
 - 서버리스(Hono)에서 호출당 1 외부요청 → 트랙 독립 스케줄러 쿼리(1~2)에 LLM 1건이 더해질 뿐.
+
+## 개념 이해도 게이트 (자가설명 확인)
+
+개념(인코딩) 모드에서 학습자가 **"왜 그런지" 자가설명**을 쓰면, 경량 LLM이 이해 충분 여부를 판정하고 형성 피드백을 준다. **충분하면 그 개념의 다지기로 통과**, 부족하면 피드백 + 재설명.
+
+- **저장 안 함:** 자가설명 텍스트도 게이트 결과도 영속화하지 않는다(휘발성, DB write 0).
+- **S 무관:** 인코딩 단계라 SRS(S·dueAt)를 건드리지 않는다(다지기 인출만 S 갱신). 게이트는 *세션 내 진행*만 통제.
+- **다지기 채점과 구분:** 점수/등급을 주지 않는다. 출력은 `{understood, feedback}`.
+
+**입력(서버 구성):**
+```jsonc
+{
+  "concept": "<concept.title>",
+  "referenceExplanation": "<concept.elaboration (+ 필요시 bodyMd 요지)>",
+  "learnerExplanation": "<유저 자가설명>",
+  "lang": "ko"
+}
+```
+
+**시스템 지시(요지):**
+> 너는 학습 코치다. 개념의 핵심 근거(referenceExplanation)와 학습자의 자가설명을 비교해, **핵심 "왜"를 짚었으면 충분으로 관대하게** 판정하라(완벽 요구 금지). 부족하면 무엇이 빠졌는지 한국어 1~2문장으로 짚어준다. 점수는 매기지 않는다.
+
+**출력(responseSchema 강제):**
+```jsonc
+{
+  "understood": true,             // 충분(통과) | 부족(재설명)
+  "feedback": "한국어 1~2문장: 잘 짚은 점 또는 빠진 핵심"
+}
+```
+
+**통과/재시도 로직 (안티-프러스트레이션):**
+```
+gate(concept, explanation):
+  if LLM 사용가능:
+     try: r = gemini(gate_contract, timeout=4s)
+          return r.understood ? PASS(r.feedback) : RETRY(r.feedback)
+     catch: fallthrough
+  # 폴백(LLM 없이) — 절대 막지 않음
+  return REVEAL_AND_CONTINUE   # elaboration 공개 + "이해했어요, 넘어가기"
+```
+- **2회 "부족" 시** 모범 `elaboration`을 공개하고 **"이해했어요, 넘어가기"** 버튼 노출 → 하드 트랩 금지.
+- **동기 게이트**라 지연이 흐름을 끊는다 → "확인 중…" 표시 + Flash-Lite + 타임아웃. 실패하면 위 폴백으로 즉시 통과 가능.
+- **적용 범위:** 첫 노출에만 게이트. **lapse 후 relearning은 게이트 생략**(이미 인코딩됨 → 인출 회전 우선), 막판 크램도 스킵.
 
 ## 보안
 
