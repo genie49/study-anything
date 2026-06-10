@@ -1,1 +1,14 @@
-.raw/*
+# 원본 소스 (유저 로컬 유지, 커밋 안 함)
+.raw/
+
+# 가공 산출물 (생성물, DB가 진실원천)
+.soul/
+
+# 비밀키/환경변수 (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+**/.DS_Store
