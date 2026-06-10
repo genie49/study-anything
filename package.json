@@ -1,0 +1,16 @@
+{
+  "name": "study-anything",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "docker compose up",
+    "dev:build": "docker compose up --build",
+    "down": "docker compose down",
+    "web": "pnpm --filter web dev",
+    "api": "pnpm --filter api dev",
+    "test": "pnpm -r test"
+  }
+}
