@@ -145,12 +145,12 @@ flowchart LR
 
 ---
 
-## 4단계 — 학습 런타임 (채점은 LLM 통합)
+## 4단계 — 학습 런타임 (LLM 2용도: 채점 · 이해도 게이트)
 
-- **채점:** `card.type`이 결정 — `mcq`는 동등비교(LLM 없음), 그 외는 **경량 Gemini가 `{score, reason}` 채점**(`reason` 노출, `score`→등급). LLM 장애 시 폴백. [runtime-grading.md](./runtime-grading.md).
+- **다지기 채점:** `card.type`이 결정 — `mcq`는 동등비교(LLM 없음), 그 외는 **경량 Gemini가 `{score, reason}` 채점**(`reason` 노출, `score`→등급). LLM 장애 시 폴백. [runtime-grading.md](./runtime-grading.md).
 - **응답 지연:** 모든 비-mcq 카드가 LLM 지연을 짊어지므로 **선접수-후채점(accept-then-grade) 필수** — 즉시 다음 카드로 넘기고 결과 도착 시 비동기로 S·dueAt 패치.
 - **스케줄/우선순위/건강/트리아지/간격:** 전부 순수 계산([데이터 모델 §5](./data-model.md)).
-- **개념 모드:** `bodyMd/elaboration/explanation` 표시 + 자기설명 입력(채점 안 함, 저장만).
+- **개념 모드(이해도 게이트):** `bodyMd/elaboration/explanation` 표시 + 자가설명 입력 → **경량 LLM이 이해 충분 여부 판정({understood, feedback})**. 충분하면 통과, 부족하면 형성 피드백+재설명. **채점 아님·S 미반영·저장 안 함**(휘발성). 첫 노출에만 게이트, relearning/크램은 스킵. [runtime-grading.md](./runtime-grading.md#개념-이해도-게이트-자가설명-확인).
 - **사전테스트:** 추측 입력 → `answer/explanation` 공개. (LLM 호출 안 함 — S 미반영)
 
 ---
@@ -162,22 +162,23 @@ flowchart LR
 
 ---
 
-## 6. 부합성 체크 — 콘텐츠는 ②에서만 생성되는가 (런타임 LLM은 채점만, 생성 아님)
+## 6. 부합성 체크 — 콘텐츠는 ②에서만 생성되는가 (런타임 LLM은 채점·이해도 확인만, 생성 아님)
 
 | 런타임이 필요로 하는 것 | 어디서 충족 | 콘텐츠 생성? | 비고 |
 |---|---|---|---|
-| 개념 본문/자기설명 텍스트 | ② `bodyMd/elaboration` | ❌ | 표시만 |
+| 개념 본문/근거 | ② `bodyMd/elaboration` | ❌ | 표시만 |
 | 인출 문항(prompt/answer) | ② `cards` | ❌ | |
 | mcq 오답(distractors) | ② 베이크 | ❌ | 런타임 생성 금지 |
 | 혼동쌍(교차·변별 출제) | ② `confusableWith` | ❌ | |
 | 해설/힌트 | ② `explanation/hint` | ❌ | |
 | **답안 채점(`{score,reason}`)** | ④ 런타임 — `mcq`=동등비교, 그 외=경량 LLM | 🟡 채점만 | 콘텐츠를 만들지 않고 ②의 정답·해설을 *적용*. LLM 장애 시 결정적 폴백([runtime-grading.md](./runtime-grading.md)) |
+| **개념 이해도 게이트(`{understood,feedback}`)** | ④ 런타임 — 경량 LLM | 🟡 판정만 | ②의 `elaboration`을 기준으로 자가설명 *판정*. S 무관·저장 안 함·LLM 장애 시 공개 후 통과([runtime-grading.md](./runtime-grading.md#개념-이해도-게이트-자가설명-확인)) |
 | 초기 난이도 시드 | ② `difficultyPrior` → cardState.D | ❌ | |
 | 스케줄(dueAt)·간격·우선순위 | ④ 순수 계산 | ❌ | |
 | 건강상태·실현가능성·트리아지 | ④ 순수 계산 | ❌ | |
 | 시험일(examDate) | **유저 입력**(③ 트랙 생성) | ❌ | ②/LLM 아님 |
 
-**결론: 부합.** 콘텐츠 생성 LLM은 ②뿐이고, 런타임 LLM은 ②가 베이크한 정답·해설을 기준으로 **채점만** 한다. 성립 **전제 조건**:
+**결론: 부합.** 콘텐츠 생성 LLM은 ②뿐이고, 런타임 LLM은 ②가 베이크한 정답·해설·근거를 기준으로 **채점·이해도 확인만** 한다. 성립 **전제 조건**:
 1. **모든 card가 `answer`(참조정답)·`explanation`을 누락 없이 베이크** — LLM 채점·폴백·노출의 공통 기준. `validate_soul.py`가 강제.
 2. **`mcq`는 `distractors[]` 필수**(선택지 렌더 + 동등비교).
 3. `grading`(acceptedAnswers/keywords/rubric)은 **선택적 폴백** — 있으면 LLM 장애 시 결정적 강등, 없으면 자가채점 폴백.
