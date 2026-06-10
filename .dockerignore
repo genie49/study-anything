@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.git
+.raw
+.soul
+.env
+.env.*
+!.env.example
+**/.DS_Store
