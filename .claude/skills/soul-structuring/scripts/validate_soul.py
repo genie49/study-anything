@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Validate a .soul/{track} bundle against the soul schema.
 
-Purpose: the soul-structuring skill is the ONLY place an LLM runs in the
-pipeline (raw -> soul -> db -> learning). The DB import and the learning
-runtime are LLM-free, so every field the runtime needs MUST be baked here,
-with NO omissions. This validator enforces that completeness deterministically
-so a half-structured bundle fails loudly instead of producing broken cards.
+Purpose: the soul-structuring skill is where content is generated. The DB
+import is fully deterministic. Runtime grading is UNIFIED on a light LLM
+judge (returns {score, reason}); the only carve-out is mcq, graded by exact
+option equality (a click, no typos). So every card needs a reference answer
+(card.answer) and an explanation; mcq additionally needs distractors (to
+render the choices). `grading` is now OPTIONAL — acceptedAnswers/keywords/
+rubric survive only as a deterministic FALLBACK for when the LLM is down.
+This validator enforces that minimum so a half-structured bundle fails loudly
+instead of producing broken cards.
 
 Usage:
     validate_soul.py <path-to-.soul/{trackName}>
@@ -18,7 +22,9 @@ import sys
 from pathlib import Path
 
 CARD_TYPES = {"cloze", "qa", "mcq", "application"}
-GRADING_MODES = {"exact", "mcq", "self", "keyword"}
+# Kept for back-compat: if a card carries grading.mode, it must be one of these.
+# grading.mode no longer drives runtime routing (card.type does) and is optional.
+GRADING_MODES = {"exact", "mcq", "self", "keyword", "llm"}
 
 
 def _err(errors, where, msg):
@@ -53,38 +59,31 @@ def validate_card(card, where, errors, card_keys):
         if not card.get(field) or not isinstance(card.get(field), str):
             _err(errors, where, f"{field} missing or empty")
 
-    # explanation strongly recommended (shown after grading; no runtime LLM)
+    # explanation required: shown to the learner after grading, and fed to the
+    # LLM judge as part of the reference so its `reason` is grounded.
     if not card.get("explanation"):
-        _err(errors, where, "explanation missing (required so feedback needs no runtime LLM)")
+        _err(errors, where, "explanation missing (shown after grading + grounds the LLM judge)")
 
     dp = card.get("difficultyPrior")
     if not isinstance(dp, (int, float)) or not (0.0 <= float(dp) <= 1.0):
         _err(errors, where, f"difficultyPrior must be a number in [0,1], got {dp!r}")
 
-    grading = card.get("grading")
-    if not isinstance(grading, dict):
-        _err(errors, where, "grading object missing")
-        return
-    mode = grading.get("mode")
-    if mode not in GRADING_MODES:
-        _err(errors, where, f"grading.mode must be one of {sorted(GRADING_MODES)}, got {mode!r}")
-        return
+    # type-driven runtime requirements (grading.mode no longer required):
+    #   - mcq        → graded by option equality, so distractors[] must exist
+    #   - all others → graded by the LLM judge against card.answer (required above)
+    if ctype == "mcq" and not card.get("distractors"):
+        _err(errors, where, "type=mcq requires non-empty distractors[] (to render the choices)")
 
-    # mode-specific completeness: this is what guarantees LLM-free runtime grading
-    if mode == "exact":
-        if not grading.get("acceptedAnswers"):
-            _err(errors, where, "grading.mode=exact requires non-empty acceptedAnswers[]")
-    elif mode == "keyword":
-        if not grading.get("keywords"):
-            _err(errors, where, "grading.mode=keyword requires non-empty keywords[]")
-    elif mode == "mcq":
-        if ctype != "mcq":
-            _err(errors, where, "grading.mode=mcq only valid for type=mcq")
-        if not card.get("distractors"):
-            _err(errors, where, "grading.mode=mcq requires non-empty distractors[]")
-    elif mode == "self":
-        if not grading.get("rubric"):
-            _err(errors, where, "grading.mode=self requires non-empty rubric[] (self-grading checkpoints)")
+    # `grading` is OPTIONAL. If present it only carries fallback hints, so we
+    # just sanity-check shape — never require its contents.
+    grading = card.get("grading")
+    if grading is not None:
+        if not isinstance(grading, dict):
+            _err(errors, where, "grading, if present, must be an object")
+            return
+        mode = grading.get("mode")
+        if mode is not None and mode not in GRADING_MODES:
+            _err(errors, where, f"grading.mode, if present, must be one of {sorted(GRADING_MODES)}, got {mode!r}")
 
 
 def main():

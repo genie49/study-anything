@@ -2,28 +2,31 @@
 
 > 관련: [데이터 모델](./data-model.md) · [알고리즘 상세](./learning-algorithm-detail.md) · [개요](./learning-algorithm-overview.md)
 
-## 대원칙 — LLM은 **2단계에서만**
+## 대원칙 — **콘텐츠 생성 LLM은 2단계에서만**
 
 ```
 .raw/{track}  ──[① 유저 유지]
       │
-      ▼  ② .claude 스킬 (LLM 유일 지점)
+      ▼  ② .claude 스킬 (콘텐츠 생성 LLM 유일 지점)
 .soul/{track}/* (완제품 구조화 데이터)
       │
       ▼  ③ import 스크립트 (순수 결정적, LLM 없음)
    MongoDB
       │
-      ▼  ④ 학습 런타임 (순수 계산 + 자동/자가 채점, LLM 없음)
+      ▼  ④ 학습 런타임 (순수 계산 + 채점) — 채점은 경량 LLM, mcq만 동등비교
 ```
 
-→ **런타임(③④)은 LLM을 절대 호출하지 않는다.** 따라서 **②가 "런타임에 필요한 모든 것"을 완제품으로 산출**해야 한다. 이 문서의 부합성 체크(§6)는 "런타임이 요구하는 모든 데이터가 ②에서 베이크되는가"를 검증한다.
+→ **콘텐츠 생성은 ②에서만.** ②가 "런타임에 필요한 모든 것"(문항·정답·오답·해설)을 완제품으로 산출한다. 이 문서의 부합성 체크(§6)는 "런타임이 요구하는 모든 데이터가 ②에서 베이크되는가"를 검증한다.
+
+> **런타임 채점(LLM 통합):** ④의 **채점**은 경량 LLM(Gemini 3.1 Flash-Lite)에 **일괄 위임**한다 — `{score, reason}` 반환, `reason`은 학습자에게 노출, `score`로 SRS 등급. 유일한 예외는 `mcq`(클릭 선택 → 동등비교, LLM 없음). 핵심 경계는 유지된다: **런타임 LLM은 콘텐츠를 만들지 않고, ②가 베이크한 정답·해설을 기준으로 *채점*만 한다.** 자세한 계약·폴백·매핑은 [runtime-grading.md](./runtime-grading.md).
 
 ```mermaid
 flowchart LR
   RAW[".raw/{track}/*.md<br/>유저 작성 원본"] -->|"② Claude 스킬<br/>(LLM)"| SOUL[".soul/{track}/*<br/>구조화 완제품"]
   SOUL -->|"③ import 스크립트<br/>(결정적)"| DB[("MongoDB")]
   DB -->|"④ 학습 런타임<br/>(계산·채점)"| APP["개념/다지기"]
-  LLM(["🤖 LLM"]) -.오직 여기만.-> SOUL
+  GEN(["🤖 콘텐츠 생성 LLM"]) -.오직 여기만.-> SOUL
+  JUDGE(["🤖 채점 LLM<br/>(mcq 제외)"]) -.채점만.-> APP
 ```
 
 ---
@@ -46,10 +49,10 @@ flowchart LR
 - **스킬 위치(예정):** `.claude/skills/soul-structuring/SKILL.md` — `plugin-dev:skill-creator` 가이드로 제작.
 - **입력:** `.raw/{trackName}/*.md`
 - **출력:** `.soul/{trackName}/` — **DB 콘텐츠 스키마와 1:1(유저 진도 제외)**.
-- **스킬이 반드시 완성해야 하는 "완제품" 항목** (런타임 LLM 불필요의 전제):
+- **스킬이 반드시 완성해야 하는 "완제품" 항목** (런타임 채점의 기준):
   - concept: `title, bodyMd, elaboration, order, confusableWith`
-  - card: `type, prompt, answer, distractors(mcq), hint, explanation, difficultyPrior`
-  - **채점 메타 `grading`** — 자유서술도 런타임에서 LLM 없이 채점되도록 ②에서 베이크 (§6 핵심).
+  - card: `type, prompt, **answer**(참조정답), distractors(mcq), hint, **explanation**, difficultyPrior`
+  - `grading`(선택) — LLM 장애 시 결정적 폴백용 `acceptedAnswers`/`keywords`/`rubric`. 필수 아님(§6).
 
 ### `.soul` 디렉토리/파일 스키마
 ```
@@ -96,7 +99,7 @@ flowchart LR
           "hint": "since + 완료",
           "explanation": "since + 기간 → 현재완료. 과거(lived)는 현재와 단절.",
           "difficultyPrior": 0.3,
-          "grading": { "mode": "exact", "acceptedAnswers": ["has lived", "has lived here"], "normalize": ["lowercase","trim","collapse-space"] }
+          "grading": { "acceptedAnswers": ["has lived", "has lived here"], "normalize": ["lowercase","trim","collapse-space"] } // 선택: LLM 장애 폴백
         },
         {
           "cardKey": "pp-vs-past-usage",
@@ -107,7 +110,7 @@ flowchart LR
           "hint": "this week가 끝났나?",
           "explanation": "this week는 아직 진행 중인 기간 → 현재완료.",
           "difficultyPrior": 0.6,
-          "grading": { "mode": "self", "rubric": ["현재완료 사용", "기간이 현재 포함임을 언급"] }
+          "grading": { "rubric": ["현재완료 사용", "기간이 현재 포함임을 언급"] } // 선택: LLM 채점 일관성↑
         }
       ]
     }
@@ -115,16 +118,14 @@ flowchart LR
 }
 ```
 
-> **핵심:** `grading.mode` 가 ②에서 확정된다 →
-> - `exact`(cloze/단답): `acceptedAnswers` + `normalize` 규칙으로 **문자열 자동 채점**
-> - `mcq`: 보기 인덱스 비교
-> - `self`(application/서술): 정답·해설·rubric **공개 후 유저 자가채점**(Anki식)
-> 어느 경우도 **런타임 LLM 불필요.**
+> **핵심:** 런타임 채점은 `card.type`이 결정한다 →
+> - `mcq`: 보기 **동등비교**(LLM 없음, 즉시·무료)
+> - `cloze`·`qa`·`application`: 경량 LLM(Gemini Flash-Lite)이 `answer`·`explanation` 기준으로 **`{score, reason}` 채점**, `reason`은 학습자에게 노출 — [runtime-grading.md](./runtime-grading.md) 참조.
+> `grading` 객체는 ②에서 베이크하되 **선택**이다(LLM 장애 시 결정적 폴백용 `acceptedAnswers`/`keywords`/`rubric`).
 
-> **⚠️ `mode:"self"`의 대가 (의식적 결정).** 자가채점은 "사용자의 '안다'를 믿지 말라"는 원칙을 일부 되돌린다. 특히 **rubric 기반 개방형 application 카드**(가장 깊고 시험준비도와 직결되는 항목)에서 관대 편향 → S 과대평가 → 복습 부족 → **가장 중요한 카드에서 시험당일 target을 조용히 미달**할 위험. 제약:
-> 1. **기계 채점 가능하면 `self` 금지** — ②는 application도 가능한 한 `keyword`/구조화 `exact`로 베이크하고, `self`는 진짜 불가능한 경우만.
-> 2. 단답 정답 대조형 `self`(이미 인출은 일어남)는 비교적 객관적이라 허용. **개방형 rubric `self`만** 위험군.
-> 3. **`self` 단독 성공만으로는 `maintaining` 승급 금지** — 객관 채점(exact/mcq) 성공이 섞이거나 더 보수적 S 증가를 적용([data-model.md](./data-model.md) 졸업 규칙에 반영 대상).
+> **⚠️ 자가채점(self) 폴백의 대가 (의식적 결정).** LLM·mcq 동등비교 모두 불가한 최후 상황에서만 "정답·해설 공개 후 자가채점"으로 강등된다. 자가채점은 "사용자의 '안다'를 믿지 말라"는 원칙을 일부 되돌려 관대 편향 → S 과대평가 → 복습 부족 위험이 있다. 제약:
+> 1. **자가채점은 폴백 전용** — LLM이 살아 있으면 개방형도 LLM이 `{score,reason}`으로 채점한다. self는 LLM 장애 + 결정적 폴백(keywords/acceptedAnswers)도 없을 때만.
+> 2. **자가채점 단독 성공만으로는 `maintaining` 승급 금지** — LLM 또는 mcq 동등비교 성공이 섞여야 하며, 아니면 더 보수적 S 증가를 적용(`selfOnlySuccess`, [data-model.md](./data-model.md) 졸업 규칙).
 
 ---
 
@@ -144,12 +145,13 @@ flowchart LR
 
 ---
 
-## 4단계 — 학습 런타임 (LLM 0)
+## 4단계 — 학습 런타임 (채점은 LLM 통합)
 
-- **채점:** `grading.mode` 분기 — exact/mcq 자동, self 자가채점. (LLM 없음)
+- **채점:** `card.type`이 결정 — `mcq`는 동등비교(LLM 없음), 그 외는 **경량 Gemini가 `{score, reason}` 채점**(`reason` 노출, `score`→등급). LLM 장애 시 폴백. [runtime-grading.md](./runtime-grading.md).
+- **응답 지연:** 모든 비-mcq 카드가 LLM 지연을 짊어지므로 **선접수-후채점(accept-then-grade) 필수** — 즉시 다음 카드로 넘기고 결과 도착 시 비동기로 S·dueAt 패치.
 - **스케줄/우선순위/건강/트리아지/간격:** 전부 순수 계산([데이터 모델 §5](./data-model.md)).
 - **개념 모드:** `bodyMd/elaboration/explanation` 표시 + 자기설명 입력(채점 안 함, 저장만).
-- **사전테스트:** 추측 입력 → `answer/explanation` 공개. (LLM 없음)
+- **사전테스트:** 추측 입력 → `answer/explanation` 공개. (LLM 호출 안 함 — S 미반영)
 
 ---
 
@@ -160,25 +162,25 @@ flowchart LR
 
 ---
 
-## 6. 부합성 체크 — "런타임 LLM 0" 이 성립하는가
+## 6. 부합성 체크 — 콘텐츠는 ②에서만 생성되는가 (런타임 LLM은 채점만, 생성 아님)
 
-| 런타임이 필요로 하는 것 | 어디서 충족 | 런타임 LLM? | 비고 |
+| 런타임이 필요로 하는 것 | 어디서 충족 | 콘텐츠 생성? | 비고 |
 |---|---|---|---|
 | 개념 본문/자기설명 텍스트 | ② `bodyMd/elaboration` | ❌ | 표시만 |
 | 인출 문항(prompt/answer) | ② `cards` | ❌ | |
 | mcq 오답(distractors) | ② 베이크 | ❌ | 런타임 생성 금지 |
 | 혼동쌍(교차·변별 출제) | ② `confusableWith` | ❌ | |
 | 해설/힌트 | ② `explanation/hint` | ❌ | |
-| **자유서술 채점** | ② `grading.mode` (exact/self/mcq) | ❌ | **자가채점 폴백으로 LLM 회피** ✅ |
+| **답안 채점(`{score,reason}`)** | ④ 런타임 — `mcq`=동등비교, 그 외=경량 LLM | 🟡 채점만 | 콘텐츠를 만들지 않고 ②의 정답·해설을 *적용*. LLM 장애 시 결정적 폴백([runtime-grading.md](./runtime-grading.md)) |
 | 초기 난이도 시드 | ② `difficultyPrior` → cardState.D | ❌ | |
 | 스케줄(dueAt)·간격·우선순위 | ④ 순수 계산 | ❌ | |
 | 건강상태·실현가능성·트리아지 | ④ 순수 계산 | ❌ | |
 | 시험일(examDate) | **유저 입력**(③ 트랙 생성) | ❌ | ②/LLM 아님 |
 
-**결론: 부합.** 단 성립 **전제 조건**:
-1. **card 스키마에 `grading`(+`explanation`, `soulKey`) 필드 추가 필요** — 기존 데이터 모델엔 없었음 → [data-model.md](./data-model.md) 수정 반영.
-2. 자유서술(application)은 기본 **자가채점(self)** 로 설계 — 자동 정답 매칭이 신뢰 가능한 경우만 `exact/keyword`.
-3. ②가 위 "완제품 항목"을 **누락 없이** 산출하도록 스킬 스펙에 체크리스트 강제(미산출 시 import 실패하도록 검증).
+**결론: 부합.** 콘텐츠 생성 LLM은 ②뿐이고, 런타임 LLM은 ②가 베이크한 정답·해설을 기준으로 **채점만** 한다. 성립 **전제 조건**:
+1. **모든 card가 `answer`(참조정답)·`explanation`을 누락 없이 베이크** — LLM 채점·폴백·노출의 공통 기준. `validate_soul.py`가 강제.
+2. **`mcq`는 `distractors[]` 필수**(선택지 렌더 + 동등비교).
+3. `grading`(acceptedAnswers/keywords/rubric)은 **선택적 폴백** — 있으면 LLM 장애 시 결정적 강등, 없으면 자가채점 폴백.
 
 ---
 
@@ -187,7 +189,7 @@ flowchart LR
 **확정(이번 검토 반영):**
 - Orphan 삭제 → soft-delete(`status:"archived"`) + 스케줄러 제외. (§3)
 - 유저 네임스페이스 → 현 파이프라인 단일 유저/로컬 전제, `userId`는 import가 주입. (§3)
-- 자유서술 채점 → 기본 `self`, 기계 채점 가능하면 keyword/exact, `self` 단독 성공은 숙달 승급 보류. (§2)
+- 채점 → **일괄 경량 LLM 위임**(`{score,reason}`), `mcq`만 동등비교. `grading`은 선택적 폴백. 자가채점 단독 성공은 숙달 승급 보류. (§2·[runtime-grading.md](./runtime-grading.md))
 
 **남은 결정:**
 - `.soul` gitignore 여부(생성물 vs 재현용 커밋).

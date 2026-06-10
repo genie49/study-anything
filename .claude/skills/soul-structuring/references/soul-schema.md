@@ -54,25 +54,27 @@
   "answer": "has lived",
   "distractors": ["lived", "is living", "lives"], // mcq일 때만 필수, 그 외 []
   "hint": "since + 완료",          // 선택
-  "explanation": "since+기간 → 현재완료. 과거형은 현재와 단절.", // 필수(채점 후 표시, 런타임 LLM 없이)
+  "explanation": "since+기간 → 현재완료. 과거형은 현재와 단절.", // 필수(채점 후 표시 + LLM 판정 근거)
   "difficultyPrior": 0.3,         // 0~1 초기 난이도(쉬움 0 → 어려움 1)
-  "grading": { "mode": "exact", "acceptedAnswers": ["has lived"], "normalize": ["lowercase","trim","collapse-space"] }
+  "grading": { "acceptedAnswers": ["has lived"], "normalize": ["lowercase","trim","collapse-space"] } // 선택(LLM 장애 폴백)
 }
 ```
 
-### grading.mode — 런타임 LLM-free 채점의 핵심
-| mode | 언제 | 필수 필드 | 채점 방식(런타임) |
-|---|---|---|---|
-| `exact` | 정답이 짧고 명확(cloze/단답) | `acceptedAnswers[]` (+ `normalize[]`) | 정규화 후 문자열 일치 |
-| `mcq` | 객관식 | (card.`distractors[]`) | 보기 선택 비교 |
-| `keyword` | 서술인데 핵심어로 판정 가능 | `keywords[]` | 키워드 포함 검사 |
-| `self` | 개방형이라 자동 불가(주로 application) | `rubric[]` | 정답·rubric 공개 후 유저 자가채점 |
+### 런타임 채점 — `card.type`이 결정 (모드 분기 없음)
+채점은 일괄적으로 경량 LLM에 위임한다. **`grading.mode`는 더 이상 필수가 아니고 런타임을 라우팅하지 않는다.** 결정하는 건 `card.type`:
 
-규칙(검증 강제):
-- **`self`는 최후수단.** 기계로 채점 가능하면 `exact`/`keyword`/`mcq`를 써라. 자가채점은 관대편향으로 학습 신호를 흐린다([data-pipeline.md §2](../../../docs/data-pipeline.md) 참조).
-- `acceptedAnswers`에는 **허용 변형들**을 모두 넣어라(예: "has lived", "has lived here").
-- `normalize`는 비교 전 적용할 정규화 단계: `lowercase | trim | collapse-space | strip-punct` 중.
-- 모든 card는 `explanation` 필수.
+| card.type | 채점 방식(런타임) | soul이 채울 것 |
+|---|---|---|
+| `mcq` | 선택지 **동등비교** (LLM 없음, 즉시·무료) | `distractors[]` 필수 |
+| `cloze` · `qa` · `application` | 경량 LLM(Gemini Flash-Lite)이 `{score, reason}` 채점 ([runtime-grading.md](../../../docs/runtime-grading.md)) | `answer`(참조정답)·`explanation` 필수 |
+
+규칙(검증 강제 / 권장):
+- **모든 card는 `answer`와 `explanation` 필수.** `mcq`는 추가로 `distractors[]` 필수.
+- `grading` 객체는 **선택**이다. 채우면 다음의 *선택적 폴백/거들기* 역할만 한다:
+  - `rubric[]` — 개방형 채점의 판정 체크포인트(LLM 일관성 ↑, 권장).
+  - `acceptedAnswers[]`(+ `normalize[]`) / `keywords[]` — **LLM 장애 시 결정적 채점으로 강등**하기 위한 폴백. 평소엔 무시됨.
+- `normalize`: `lowercase | trim | collapse-space | strip-punct` 중(폴백 비교 전 적용).
+- (후방호환) 기존 번들의 `grading.mode`는 무시되며 그대로 둬도 무방하다.
 
 ## 작성 원칙 (콘텐츠 품질)
 - **요약 금지, 인출 단위로 분해.** 한 카드 = 한 사실/관계(atomic). 강의록의 잡담·인사말은 버리고 개념만 추출.

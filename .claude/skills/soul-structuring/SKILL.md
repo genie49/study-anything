@@ -1,13 +1,13 @@
 ---
 name: soul-structuring
-description: Convert a track's raw study sources into a structured, learning-ready .soul bundle. Use when turning .raw/{trackName}/*.md (lecture transcripts, notes, textbook dumps) into .soul/{trackName}/ JSON (concepts + retrieval cards with baked grading) for the study-anything pipeline. Trigger on requests like "structure this track", "build the soul for {track}", "가공해줘", "raw를 soul로", or when preparing content for DB import. This is the ONLY LLM step in the raw→soul→db→learning pipeline, so it must emit complete, runtime-LLM-free data.
+description: Convert a track's raw study sources into a structured, learning-ready .soul bundle. Use when turning .raw/{trackName}/*.md (lecture transcripts, notes, textbook dumps) into .soul/{trackName}/ JSON (concepts + retrieval cards with baked reference answers + explanations) for the study-anything pipeline. Trigger on requests like "structure this track", "build the soul for {track}", "가공해줘", "raw를 soul로", or when preparing content for DB import. This is the content-generation LLM step in the raw→soul→db→learning pipeline; runtime grading is unified on a light LLM judge (mcq is the only carve-out, graded by option equality), so every card must bake a reference answer and explanation.
 ---
 
 # soul-structuring
 
 Raw 학습 소스를 **암기·시험 최적화된 인출 단위**로 구조화해 `.soul/{trackName}/`로 출력한다. 이 결과는 그대로 DB에 import되어 [ASR 알고리즘](../../../docs/learning-algorithm-overview.md)으로 학습된다.
 
-**대원칙:** 파이프라인(raw→soul→db→학습)에서 **LLM은 이 단계에서만** 쓴다. 따라서 런타임이 필요로 하는 모든 것(문항·정답·오답·해설·채점 메타·혼동쌍)을 **여기서 누락 없이 베이크**해야 한다. 출력은 반드시 `scripts/validate_soul.py`를 통과해야 한다.
+**대원칙:** 콘텐츠 생성(LLM)은 이 단계에서 끝난다. 런타임이 필요로 하는 모든 것(문항·**참조정답**·오답선택지·**해설**·혼동쌍)을 **여기서 누락 없이 베이크**해야 한다. 런타임 채점은 `card.type`이 결정한다 — `mcq`는 선택지 동등비교, 그 외(cloze·qa·application)는 경량 LLM이 참조정답·해설을 기준으로 채점. 출력은 반드시 `scripts/validate_soul.py`를 통과해야 한다.
 
 출력 스키마(필드·규칙·grading.mode)는 **[references/soul-schema.md](references/soul-schema.md)** 가 권위 문서다. 작성 전 반드시 읽을 것.
 
@@ -30,12 +30,13 @@ Raw 학습 소스를 **암기·시험 최적화된 인출 단위**로 구조화�
 - mcq의 distractor는 **혼동 개념에서** 끌어와 변별을 훈련시킨다.
 - 모든 카드에 `explanation`(채점 후 보여줄 해설)과 `grading`을 채운다.
 
-### 4. grading.mode 결정 (가장 중요 — 런타임 LLM-free의 관건)
-- 정답이 짧고 명확 → `exact` + `acceptedAnswers`(허용 변형 모두) + `normalize`.
-- 객관식 → `mcq`.
-- 서술인데 핵심어로 판정 가능 → `keyword` + `keywords`.
-- **개방형이라 자동 불가일 때만** `self` + `rubric`. self는 최후수단(자가채점은 학습 신호를 흐림).
-- 자세한 규칙은 [references/soul-schema.md](references/soul-schema.md)의 grading 표 참조.
+### 4. 정답·해설 베이크 (런타임 채점의 관건)
+런타임 채점은 모드 분기 없이 **`card.type`이 결정**한다. soul이 할 일은 채점기가 쓸 기준을 빠짐없이 채우는 것:
+- **모든 카드:** `answer`(참조정답)와 `explanation`(채점 후 노출 + LLM 판정 근거)을 반드시 채운다.
+- **`mcq`:** `distractors[]`(혼동 개념에서 끌어온 그럴듯한 오답)를 채운다 → 런타임은 선택지 동등비교로 즉시 채점.
+- **그 외(cloze·qa·application):** 런타임에 경량 LLM이 `answer`·`explanation` 기준으로 `{score, reason}` 채점. 모호하면 `grading.rubric[]`(선택)으로 판정 기준을 거들 수 있다.
+- (선택·폴백) `grading.acceptedAnswers`/`keywords`를 남기면 **LLM 장애 시 결정적 채점**으로 강등된다. 필수 아님.
+- 자세한 규칙은 [references/soul-schema.md](references/soul-schema.md)·[런타임 채점](../../../docs/runtime-grading.md) 참조.
 
 ### 5. 파일 쓰기
 - `.soul/{trackSlug}/manifest.json` + `.soul/{trackSlug}/decks/{deckSlug}.json`.

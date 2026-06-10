@@ -122,13 +122,13 @@ erDiagram
   "answer": "has lived",
   "distractors": ["lived", "is living", "lives"], // mcq용(없으면 빈 배열)
   "hint": "since + 완료",
-  "explanation": "since + 기간 → 현재완료. 과거형은 현재와 단절.", // 채점 후 표시(런타임 생성 금지)
-  "grading": {                     // ★ 런타임 LLM 없이 채점하기 위해 ②에서 베이크
-    "mode": "exact",               // exact | mcq | self | keyword
-    "acceptedAnswers": ["has lived", "has lived here"],
+  "explanation": "since + 기간 → 현재완료. 과거형은 현재와 단절.", // 필수: 채점 후 표시 + LLM 판정 근거(런타임 생성 금지)
+  "grading": {                     // 선택 — 런타임 라우팅은 card.type이 결정(mcq=동등비교, 그 외=LLM)
+    "rubric": [],                  // 선택: 개방형 LLM 채점의 판정 체크포인트(일관성↑)
+    "acceptedAnswers": ["has lived", "has lived here"], // 선택: LLM 장애 시 결정적 폴백
     "normalize": ["lowercase", "trim", "collapse-space"],
-    "keywords": [],                // mode:"keyword"일 때
-    "rubric": []                   // mode:"self"일 때 자가채점 체크포인트
+    "keywords": []                 // 선택: LLM 장애 시 키워드 폴백
+    // (후방호환) 기존 번들의 "mode" 필드는 무시됨 — 런타임을 라우팅하지 않음
   },
   "difficultyPrior": 0.3,          // 초기 난이도 추정(0~1) → cardState.D 시드
   "soulHash": "sha1:…",            // 재가공 변경 감지(진도 마이그레이션 판단)
@@ -137,7 +137,7 @@ erDiagram
 }
 ```
 
-> **요약:** Claude 스킬이 raw md를 가공해 산출해야 하는 "상용 형태" = `track 1 → deck N → concept N → card N(type별)`. 단순 요약이 아니라 **인출 가능한 atomic 카드 + 혼동쌍 태그 + 채점 메타(`grading`)**가 핵심. `grading` 덕분에 **런타임은 LLM 없이 자동/자가 채점**한다([파이프라인 문서](./data-pipeline.md) §6).
+> **요약:** Claude 스킬이 raw md를 가공해 산출해야 하는 "상용 형태" = `track 1 → deck N → concept N → card N(type별)`. 단순 요약이 아니라 **인출 가능한 atomic 카드 + 혼동쌍 태그 + 참조정답(`answer`)·해설(`explanation`)**이 핵심. 런타임 채점은 `card.type`이 결정한다 — **`mcq`는 동등비교, 그 외는 경량 LLM이 `{score, reason}` 채점**([런타임 채점](./runtime-grading.md) · [파이프라인](./data-pipeline.md) §6). `grading` 객체는 선택적 폴백일 뿐이다.
 
 ---
 
@@ -161,7 +161,7 @@ erDiagram
   "priority": 0.0,            // 마지막 계산값(선택 캐시)
   "triaged": false,           // 분량초과 트리아지로 범위 제외 표시
   "archived": false,          // 원본 카드가 재가공에서 사라짐(orphan soft-delete) → 스케줄러 제외
-  "selfOnlySuccess": true     // 지금까지 성공이 self 채점뿐 → 졸업 승급 보류(아래 ⑦)
+  "selfOnlySuccess": true     // 성공이 '자가채점 폴백'뿐(LLM/mcq 동등비교 성공 없음) → 졸업 승급 보류(아래 ⑦)
 }
 ```
 - 콘텐츠 생성 시 **모든 카드에 대해 `stage:"new", S:0, dueAt: now`로 cardState를 함께 생성** → "신규 카드 = dueAt이 지금"으로 통일되어 쿼리가 단순해짐.
@@ -229,7 +229,7 @@ reviewLogs:  { trackId: 1, ts: -1 }, { cardId: 1, ts: -1 }
 | **④ 용량** | 오늘 처리량 한도 | `track.config.dailyCapacity` (+ 유저의 오늘 override) |
 | **⑤ 건강 판정** | 상태기계 | `backlog=count(dueAt<오늘0시)`; `lapseRate=reviewLogs(최근)`; **단위 통일 후** `feasible = 필요_분 ≤ 용량_분 × 남은일수` → `track.health.state` 갱신 |
 | **⑥ 인출 처리** | 채점→상태 갱신(트랜잭션) | `reviewLogs.insertOne(...)` + `cardStates.updateOne({_id}, { S,D,reps,lapses,lastReviewedAt, stage, successDays, dueAt: now + capToExam(intervalForTarget(S, target)) })` |
-| **⑦ 졸업** | 숙달 전이 | `|successDays|≥nMin`(짧은 시험이면 완화) **and** `R(examDate)≥target` **and** `selfOnlySuccess=false`(객관 채점 성공 1회 이상) → `stage:"maintaining"` + `dueAt` 길게. due 되면 ②로 자동 복귀. self 성공뿐이면 보수적 S 증가 적용 |
+| **⑦ 졸업** | 숙달 전이 | `|successDays|≥nMin`(짧은 시험이면 완화) **and** `R(examDate)≥target` **and** `selfOnlySuccess=false`(LLM 또는 mcq 동등비교 성공 1회 이상) → `stage:"maintaining"` + `dueAt` 길게. due 되면 ②로 자동 복귀. 자가채점 폴백 성공뿐이면 보수적 S 증가 |
 | **⑧ 트리아지** | 분량초과 | 우선순위 낮은 cardStates `triaged:true` + 사용자 고지 리스트 반환 |
 
 핵심 도출 함수(콘텐츠 아닌 순수 계산, 서버 코드에 위치):
