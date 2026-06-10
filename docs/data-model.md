@@ -99,12 +99,13 @@ erDiagram
 ```jsonc
 {
   "_id": "ObjectId",
+  "soulKey": "present-perfect-vs-past",  // ② 산출 안정키(idempotent import)
   "trackId": "ObjectId", "deckId": "ObjectId", "userId": "ObjectId",
   "title": "현재완료 vs 과거시제",
   "bodyMd": "## 핵심\n현재완료는 …",          // 개념 본문(인코딩 단계 표시)
   "elaboration": "왜? 과거의 한 시점 vs 현재 영향…", // 자기설명 모범/유도
   "order": 3,
-  "confusableWith": ["conceptId_x", "conceptId_y"], // 교차·변별 출제용(혼동쌍)
+  "confusableWith": ["conceptId_x", "conceptId_y"], // 교차·변별 출제용(혼동쌍). import가 soulKey→ObjectId 해소
   "createdAt": "…"
 }
 ```
@@ -113,6 +114,7 @@ erDiagram
 ```jsonc
 {
   "_id": "ObjectId",
+  "soulKey": "pp-since-2010",      // ② 산출 안정키(idempotent import·재가공 추적)
   "conceptId": "ObjectId", "trackId": "ObjectId",
   "deckId": "ObjectId", "userId": "ObjectId",
   "type": "cloze",                 // cloze | qa | mcq | application
@@ -120,12 +122,22 @@ erDiagram
   "answer": "has lived",
   "distractors": ["lived", "is living", "lives"], // mcq용(없으면 빈 배열)
   "hint": "since + 완료",
+  "explanation": "since + 기간 → 현재완료. 과거형은 현재와 단절.", // 채점 후 표시(런타임 생성 금지)
+  "grading": {                     // ★ 런타임 LLM 없이 채점하기 위해 ②에서 베이크
+    "mode": "exact",               // exact | mcq | self | keyword
+    "acceptedAnswers": ["has lived", "has lived here"],
+    "normalize": ["lowercase", "trim", "collapse-space"],
+    "keywords": [],                // mode:"keyword"일 때
+    "rubric": []                   // mode:"self"일 때 자가채점 체크포인트
+  },
   "difficultyPrior": 0.3,          // 초기 난이도 추정(0~1) → cardState.D 시드
+  "soulHash": "sha1:…",            // 재가공 변경 감지(진도 마이그레이션 판단)
+  "status": "active",              // active | archived(재가공 시 사라진 카드 → soft-delete)
   "createdAt": "…"
 }
 ```
 
-> **요약:** Claude 스킬이 raw md를 가공해 산출해야 하는 "상용 형태" = `track 1 → deck N → concept N → card N(type별)`. 단순 요약이 아니라 **인출 가능한 atomic 카드 + 혼동쌍 태그**가 핵심.
+> **요약:** Claude 스킬이 raw md를 가공해 산출해야 하는 "상용 형태" = `track 1 → deck N → concept N → card N(type별)`. 단순 요약이 아니라 **인출 가능한 atomic 카드 + 혼동쌍 태그 + 채점 메타(`grading`)**가 핵심. `grading` 덕분에 **런타임은 LLM 없이 자동/자가 채점**한다([파이프라인 문서](./data-pipeline.md) §6).
 
 ---
 
@@ -147,7 +159,9 @@ erDiagram
   "successDays": ["2026-06-06", "2026-06-08"], // 서로 다른 날 성공(졸업 판정)
   "sessionCorrectStreak": 1,  // 세션 내 정답 연속(성공적 재학습 졸업)
   "priority": 0.0,            // 마지막 계산값(선택 캐시)
-  "triaged": false            // 분량초과 트리아지로 범위 제외 표시
+  "triaged": false,           // 분량초과 트리아지로 범위 제외 표시
+  "archived": false,          // 원본 카드가 재가공에서 사라짐(orphan soft-delete) → 스케줄러 제외
+  "selfOnlySuccess": true     // 지금까지 성공이 self 채점뿐 → 졸업 승급 보류(아래 ⑦)
 }
 ```
 - 콘텐츠 생성 시 **모든 카드에 대해 `stage:"new", S:0, dueAt: now`로 cardState를 함께 생성** → "신규 카드 = dueAt이 지금"으로 통일되어 쿼리가 단순해짐.
@@ -205,7 +219,7 @@ reviewLogs:  { trackId: 1, ts: -1 }, { cardId: 1, ts: -1 }
 | 단계 | 한 일 | 데이터 연산 |
 |---|---|---|
 | **① 지평** | Δ 계산 | `track.examDate − now` |
-| **② 작업 풀** | 연체+오늘due 복습 | `cardStates.find({userId,trackId, dueAt≤now, stage≠"new", triaged:false})` — **stage 화이트리스트 금지**(아래 주의) |
+| **② 작업 풀** | 연체+오늘due 복습 | `cardStates.find({userId,trackId, dueAt≤now, stage≠"new", triaged:false, archived:false})` — **stage 화이트리스트 금지**(아래 주의) |
 | | 신규(도입 마감 전이면) | `cardStates.find({userId,trackId, stage:"new"}).limit(intakeQuota)` — `now < track.health.newIntroDeadline`일 때만 |
 
 > **⚠️ due 선별은 오직 `dueAt`로.** `stage∈{...}` 같은 화이트리스트를 추가하면 `mastered`(유지 복귀용)·`pretest`/`encoding`(중단된 첫 세션) 카드가 두 쿼리 어디에도 안 잡혀 **영구 누락**된다. 규칙:
@@ -215,7 +229,7 @@ reviewLogs:  { trackId: 1, ts: -1 }, { cardId: 1, ts: -1 }
 | **④ 용량** | 오늘 처리량 한도 | `track.config.dailyCapacity` (+ 유저의 오늘 override) |
 | **⑤ 건강 판정** | 상태기계 | `backlog=count(dueAt<오늘0시)`; `lapseRate=reviewLogs(최근)`; **단위 통일 후** `feasible = 필요_분 ≤ 용량_분 × 남은일수` → `track.health.state` 갱신 |
 | **⑥ 인출 처리** | 채점→상태 갱신(트랜잭션) | `reviewLogs.insertOne(...)` + `cardStates.updateOne({_id}, { S,D,reps,lapses,lastReviewedAt, stage, successDays, dueAt: now + capToExam(intervalForTarget(S, target)) })` |
-| **⑦ 졸업** | 숙달 전이 | `|successDays|≥nMin`(짧은 시험이면 완화) **and** `R(examDate)≥target` → `stage:"maintaining"` + `dueAt` 길게(유지 주기). due 되면 ②로 자동 복귀 |
+| **⑦ 졸업** | 숙달 전이 | `|successDays|≥nMin`(짧은 시험이면 완화) **and** `R(examDate)≥target` **and** `selfOnlySuccess=false`(객관 채점 성공 1회 이상) → `stage:"maintaining"` + `dueAt` 길게. due 되면 ②로 자동 복귀. self 성공뿐이면 보수적 S 증가 적용 |
 | **⑧ 트리아지** | 분량초과 | 우선순위 낮은 cardStates `triaged:true` + 사용자 고지 리스트 반환 |
 
 핵심 도출 함수(콘텐츠 아닌 순수 계산, 서버 코드에 위치):

@@ -1,1 +1,6 @@
-.raw/*.DS_Store
+# 원본 소스 (유저 로컬 유지, 커밋 안 함)
+.raw/
+
+# macOS
+.DS_Store
+**/.DS_Store
