@@ -7,10 +7,10 @@
 ```
 .raw/{track}  ──[① 유저 유지]
       │
-      ▼  ② .claude 스킬 (콘텐츠 생성 LLM 유일 지점)
-.soul/{track}/* (완제품 구조화 데이터)
+      ▼  ② .claude 스킬 (콘텐츠 생성 LLM 유일 지점) → 마지막에 zip 패킹
+.soul/{track}/* (완제품) → .soul/{track}.zip (업로드용)
       │
-      ▼  ③ import: CLI → 인증 API(JWT→userId) (순수 결정적, LLM 없음)
+      ▼  ③ import: 앱에서 zip 업로드 → 인증 API(JWT→userId) (순수 결정적, LLM 없음)
    MongoDB
       │
       ▼  ④ 학습 런타임 (순수 계산 + 채점) — 채점은 경량 LLM, mcq만 동등비교
@@ -22,8 +22,8 @@
 
 ```mermaid
 flowchart LR
-  RAW[".raw/{track}/*.md<br/>유저 작성 원본"] -->|"② Claude 스킬<br/>(LLM)"| SOUL[".soul/{track}/*<br/>구조화 완제품"]
-  SOUL -->|"③ CLI→인증 API<br/>(결정적·JWT)"| DB[("MongoDB")]
+  RAW[".raw/{track}/*.md<br/>유저 작성 원본"] -->|"② Claude 스킬<br/>(LLM)"| SOUL[".soul/{track}.zip<br/>구조화 완제품(zip)"]
+  SOUL -->|"③ 앱 ZIP 업로드→인증 API<br/>(결정적·JWT)"| DB[("MongoDB")]
   DB -->|"④ 학습 런타임<br/>(계산·채점)"| APP["개념/다지기"]
   GEN(["🤖 콘텐츠 생성 LLM"]) -.오직 여기만.-> SOUL
   JUDGE(["🤖 채점 LLM<br/>(mcq 제외)"]) -.채점만.-> APP
@@ -129,11 +129,13 @@ flowchart LR
 
 ---
 
-## 3단계 — import (`.soul` → **인증 API** → DB)
+## 3단계 — import (`.soul.zip` → **인증 API** → DB)
 
-- **순수 결정적. LLM 없음.** CLI 스크립트가 `.soul/{track}/**`를 읽어 **인증된 API `POST /tracks/import`에 JSON으로 POST**(사용자 JWT 동봉)한다. API가 그 본문을 컬렉션에 upsert. (Mongo 직접 쓰기 아님 — 소유권을 JWT에서 도출하기 위함, [auth.md](./auth.md))
+- **순수 결정적. LLM 없음.** 사용자가 ②의 산출물 **`.soul/{track}.zip`을 앱에서 업로드**(트랙 추가 → ZIP 업로드, [화면구조도](./frontend-screens.md))한다. 프론트가 그 zip을 **인증된 API `POST /tracks/import`에 multipart로 전송**(사용자 JWT 동봉) → API가 **서버에서 압축 해제**해 `manifest.json` + `decks/*.json`을 읽고 컬렉션에 upsert. (Mongo 직접 쓰기 아님 — 소유권을 JWT에서 도출하기 위함, [auth.md](./auth.md))
+- **현 구현 상태:** `POST /tracks/import`는 지금은 **JSON 본문**(`{manifest, decks}`)을 받는다([`apps/api/src/tracks/`](../apps/api/src/tracks/)). **zip multipart 수용 + 서버 압축 해제는 구현 예정** — 결정적 upsert 로직(`importBundle`)은 그대로 두고 **입력 어댑터(zip→bundle)만 앞단에 추가**한다.
+- **CLI 경로도 유효:** zip은 `pack_soul.py`가 만든 평범한 아카이브라, CLI/스크립트로 같은 zip을 만들어 같은 엔드포인트에 올려도 동일하게 동작한다(얇은 클라이언트). 프론트 업로드가 기본 경로일 뿐 CLI를 배제하지 않는다.
 - 매핑:
-  - `manifest` → `tracks` (단 **`examDate`는 유저 입력**으로 받음: CLI 인자 또는 앱 트랙 생성 폼)
+  - `manifest` → `tracks` (단 **`examDate`는 zip에 없음 → 유저 입력**: 업로드 직후 앱 **시험일 설정** 화면 #14)
   - `decks[]` → `decks`
   - `concepts[]` → `concepts` (`confusableWith`의 conceptKey → ObjectId 해소)
   - `cards[]` → `cards`
@@ -141,7 +143,7 @@ flowchart LR
 - **Idempotent:** `conceptKey/cardKey`를 안정 외부키로 저장(`cards.soulKey`) → 재가공 시 콘텐츠 갱신, **진도(cardStates) 보존**.
 - 재가공으로 prompt/answer가 바뀐 카드는 `soulHash` 비교로 감지 → 정책에 따라 진도 유지 또는 리셋(§7).
 - **★ Orphan(삭제) 정책 — 필수:** 재가공 시 LLM이 이전에 있던 카드를 **더는 안 만들 수 있다.** upsert만 하면 그 카드가 DB에 남아 `dueAt≤now` 스케줄러에 계속 잡히는 **좀비 카드**가 된다. → import는 `{userId,trackId}` 범위의 **기존 soulKey 집합과 새 `.soul`의 soulKey 집합을 diff**해, 빠진 카드를 **soft-delete(`status:"archived"`)** 하고 스케줄러 쿼리에서 제외(`status:"active"` 조건 추가). 해당 cardStates도 함께 비활성.
-- **★ 유저 네임스페이스:** `.raw/.soul`은 `{trackName}`만으로 키잉되어 **유저 구분이 없다.** `trackSlug:"토익"`은 유저 간 충돌하므로 **API가 JWT에서 `userId`를 도출해 주입**하고, `trackSlug/soulKey` 유일성은 항상 `{userId, …}`로 스코프. 이제 **여러 구글 계정이 한 인스턴스에서 독립**(단일유저 전제 폐기). CLI는 `.soul`을 읽어 사용자 토큰으로 import API를 호출하는 얇은 클라이언트일 뿐 — 별도 "유저 매핑 단계"는 JWT가 대신한다.
+- **★ 유저 네임스페이스:** `.raw/.soul`은 `{trackName}`만으로 키잉되어 **유저 구분이 없다.** `trackSlug:"토익"`은 유저 간 충돌하므로 **API가 JWT에서 `userId`를 도출해 주입**하고, `trackSlug/soulKey` 유일성은 항상 `{userId, …}`로 스코프. 이제 **여러 구글 계정이 한 인스턴스에서 독립**(단일유저 전제 폐기). 업로드된 zip은 익명의 콘텐츠일 뿐 — 소유권은 **JWT가 부여**하므로, zip 안에 유저 정보를 넣을 필요가 없다.
 
 ---
 
@@ -191,9 +193,13 @@ flowchart LR
 - Orphan 삭제 → soft-delete(`status:"archived"`) + 스케줄러 제외. (§3)
 - 유저 네임스페이스 → import는 **인증 API 경유**, `userId`는 JWT에서 도출. 멀티 구글 계정 독립(단일유저 전제 폐기). (§3·[auth.md](./auth.md))
 - 채점 → **일괄 경량 LLM 위임**(`{score,reason}`), `mcq`만 동등비교. `grading`은 선택적 폴백. 자가채점 단독 성공은 숙달 승급 보류. (§2·[runtime-grading.md](./runtime-grading.md))
+- **트랙 추가 경로 → 앱 ZIP 업로드.** 스킬이 `.soul/{track}.zip`을 패킹(`pack_soul.py`)하고, 사용자가 앱에서 업로드한다(트랙 추가 → ZIP 업로드). CLI도 같은 zip·엔드포인트로 가능. (§3·[화면구조도](./frontend-screens.md))
+- **examDate 입력 경로 → 업로드 직후 앱 "시험일 설정" 화면(#14).** zip엔 examDate가 없다.
 
-**남은 결정:**
+**남은 결정 / 구현 대기:**
+- **[구현·우선] 트랙 examDate 쓰기 엔드포인트**(`PATCH /tracks/:id` 등) — 앱 **시험일 설정(#14)·트랙 수정(#3)** 이 호출. 업로드된 트랙은 examDate가 비어 학습 계획을 못 만들므로, **업로드 흐름을 실제로 완성하는 첫 백엔드 조각**(zip 어댑터보다 앞). 현재 프론트 #14의 "저장하고 학습 시작"은 화면 전환만 하고 영속화 경로가 없다.
+- **[구현] `POST /tracks/import` zip multipart 수용 + 서버 압축 해제** — 입력 어댑터만 추가, `importBundle`은 그대로. **어댑터는 zip에서 `manifest.json`을 읽고, `manifest.decks[].slug`마다 `decks/{slug}.json`을 읽어 `SoulBundle.decks`(평탄 배열)로 조립**한 뒤 기존 `validateBundle`/`importBundle`에 넘긴다(pack_soul.py가 덱을 파일별로 나눠 담으므로).
+- **[구현] user-initiated 트랙 삭제 엔드포인트** — 앱 수정 화면의 "위험 구역"(트랙 삭제)이 호출. import-time orphan soft-delete와는 별개의 신규 기능.
 - `.soul` gitignore 여부(생성물 vs 재현용 커밋).
 - 재가공 시 `soulHash` 변경 카드의 cardStates 마이그레이션(진도 유지 vs 리셋).
-- import 시 examDate 입력 경로(import API 인자 vs 앱 트랙 수정 폼 #3 — 후자가 기본).
 - 스킬 출력 JSON 스키마 validate를 import 전단에 강제(미충족 시 import 실패).

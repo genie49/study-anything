@@ -44,10 +44,10 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
 }
 
 // 1. 트랙 목록 (홈)
-export function S_TrackList({ onOpen, onNav }: { onOpen?: () => void; onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
+export function S_TrackList({ onOpen, onAdd, onNav }: { onOpen?: () => void; onAdd?: () => void; onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
   return (
     <Screen>
-      <TopBar title="내 학습" big />
+      <TopBar title="내 학습" big action={{ label: '＋ 추가', solid: true }} onAction={onAdd} />
       <Body gap={12}>
         <div onClick={onOpen} style={{ cursor: 'pointer' }}>
           <Card strong>
@@ -84,7 +84,7 @@ export function S_TrackList({ onOpen, onNav }: { onOpen?: () => void; onNav?: (t
 }
 
 // 12. 빈 상태
-export function S_Empty({ onNav }: { onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
+export function S_Empty({ onAdd, onNav }: { onAdd?: () => void; onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
   return (
     <Screen>
       <TopBar title="내 학습" big />
@@ -92,18 +92,11 @@ export function S_Empty({ onNav }: { onNav?: (t: 'home' | 'today' | 'stats' | 's
         <div style={{ marginBottom: 22 }}><AppMark size={76} /></div>
         <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>아직 트랙이 없어요</div>
         <div style={{ fontSize: 14, color: WF.ink2, lineHeight: 1.6, maxWidth: 250 }}>
-          콘텐츠는 프론트가 아닌 <b>CLI</b>에서 가공합니다.
+          콘텐츠 <b>ZIP</b>을 올리면 자동으로<br />덱과 문항이 만들어져요.
         </div>
-        <Card style={{ marginTop: 26, textAlign: 'left', width: '100%', background: WF.fill1, borderStyle: 'dashed', padding: '20px 22px' }}>
-          <div style={{ display: 'flex', gap: 13, marginBottom: 14 }}>
-            <span style={{ fontFamily: WF.mono, fontWeight: 700, color: WF.ink2 }}>1</span>
-            <span style={{ fontSize: 13.5, lineHeight: 1.5 }}><b>soul-structuring</b> 스킬로<br /><span style={{ color: WF.ink2 }}>.soul 콘텐츠 생성</span></span>
-          </div>
-          <div style={{ display: 'flex', gap: 13 }}>
-            <span style={{ fontFamily: WF.mono, fontWeight: 700, color: WF.ink2 }}>2</span>
-            <span style={{ fontSize: 13.5, lineHeight: 1.5 }}><b>import</b> 스크립트로<br /><span style={{ color: WF.ink2 }}>DB에 입력</span></span>
-          </div>
-        </Card>
+        <div style={{ marginTop: 26, width: '100%' }}>
+          <Btn primary onClick={onAdd}>＋ ZIP 업로드로 트랙 추가</Btn>
+        </div>
       </Body>
       <TabBar active="home" onNav={onNav} />
     </Screen>
@@ -158,23 +151,55 @@ export function S_Dashboard({ defaultInfo = false, onStart, onEdit, onBack }: { 
   )
 }
 
-// 3. 트랙 수정 (이름·시험일만)
-export function S_Edit({ onBack, onSave }: { onBack?: () => void; onSave?: () => void }) {
+// 3. 트랙 수정 (이름·시험일 + 삭제)
+export function S_Edit({ onBack, onSave, onDelete }: { onBack?: () => void; onSave?: () => void; onDelete?: () => void }) {
+  const [confirm, setConfirm] = useState(false)
   return (
     <Screen>
       <TopBar title="토익 수정" back action={{ label: '저장', solid: true }} onBack={onBack} onAction={onSave} />
       <Body gap={22} style={{ paddingTop: 22 }}>
         <Field label="트랙 이름" value="토익" />
         <Field label="시험일 (deadline)" value="2026 – 06 – 11" icon="📅" />
-        <Card style={{ background: WF.fill1, borderStyle: 'dashed', marginTop: 6 }}>
-          <div style={{ display: 'flex', gap: 9 }}>
-            <span style={{ color: WF.ink3 }}>ⓘ</span>
-            <span style={{ fontSize: 12.5, color: WF.ink2, lineHeight: 1.55 }}>
-              <b>이름·시험일만</b> 수정 가능. 트랙 추가/삭제는 CLI(스킬 + 스크립트)에서만 합니다.
-            </span>
+
+        {/* 위험 구역 — 삭제 */}
+        <div style={{ marginTop: 'auto' }}>
+          <Divider>위험 구역</Divider>
+          <div onClick={() => setConfirm(true)} style={{
+            marginTop: 14, cursor: 'pointer',
+            border: `1px solid ${TONE.danger.c}`, borderRadius: 11, padding: '13px 18px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            fontSize: 15, fontWeight: 600, color: TONE.danger.c, background: WF.paper,
+          }}>
+            <Marker tone="danger" /> 트랙 삭제
           </div>
-        </Card>
+        </div>
       </Body>
+      {confirm && <DeleteSheet name="토익" onClose={() => setConfirm(false)} onConfirm={onDelete} />}
     </Screen>
+  )
+}
+
+// 트랙 삭제 확인 시트
+function DeleteSheet({ name, onClose, onConfirm }: { name: string; onClose?: () => void; onConfirm?: () => void }) {
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(30,28,24,0.32)', display: 'flex', alignItems: 'flex-end', zIndex: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: WF.paper, width: '100%', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: '16px 22px calc(env(safe-area-inset-bottom) + 26px)', boxShadow: '0 -8px 30px rgba(0,0,0,0.12)' }}>
+        <div style={{ width: 38, height: 4, background: WF.fill3, borderRadius: 4, margin: '0 auto 18px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+          <Marker tone="danger" size={11} />
+          <span style={{ fontSize: 17, fontWeight: 700 }}>‘{name}’ 트랙을 삭제할까요?</span>
+        </div>
+        <div style={{ fontSize: 13.5, color: WF.ink2, lineHeight: 1.55, marginBottom: 18 }}>
+          덱·문항과 <b>모든 학습 이력·진척</b>이 영구 삭제됩니다. 되돌릴 수 없어요.
+        </div>
+        <div style={{ background: WF.fill1, border: `1px solid ${WF.lineSoft}`, borderRadius: 10, padding: '11px 13px', marginBottom: 18, fontFamily: WF.mono, fontSize: 11.5, color: WF.ink2 }}>
+          삭제 대상: 덱 3 · 문항 128 · 통계 전체
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}><Btn ghost onClick={onClose}>취소</Btn></div>
+          <div onClick={onConfirm} style={{ flex: 1, background: TONE.danger.c, color: '#fff', fontFamily: WF.sans, fontSize: 15, fontWeight: 600, padding: '13px 18px', borderRadius: 10, textAlign: 'center', cursor: 'pointer' }}>삭제</div>
+        </div>
+      </div>
+    </div>
   )
 }

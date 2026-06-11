@@ -2,12 +2,13 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { WF } from './design/tokens'
 import { hasBackend, hasSessionHint, login, tryRefresh, logout } from './auth'
 import { S_Login, S_TrackList, S_Dashboard, S_Edit } from './screens/home'
+import { S_Upload, S_ExamDate } from './screens/upload'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
 import { S_Today, S_Stats, S_Settings } from './screens/tabs'
 
 type Screen =
   | 'home' | 'today' | 'stats' | 'settings'
-  | 'dashboard' | 'edit'
+  | 'dashboard' | 'edit' | 'upload' | 'examdate'
   | 'concept' | 'quiz' | 'grade' | 'summary'
 
 type Tab = 'home' | 'today' | 'stats' | 'settings'
@@ -48,12 +49,15 @@ export default function App() {
 
   const view = () => {
     switch (screen) {
-      case 'home': return <S_TrackList onOpen={() => setScreen('dashboard')} onNav={nav} />
+      case 'home': return <S_TrackList onOpen={() => setScreen('dashboard')} onAdd={() => setScreen('upload')} onNav={nav} />
       case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
       case 'stats': return <S_Stats onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
       case 'dashboard': return <S_Dashboard onStart={() => setScreen('concept')} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
-      case 'edit': return <S_Edit onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} />
+      case 'edit': return <S_Edit onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={() => setScreen('home')} />
+      // 트랙 추가: zip 업로드 → 완료 → 시험일 설정 → 대시보드
+      case 'upload': return <S_Upload onBack={() => setScreen('home')} onDone={() => setScreen('examdate')} />
+      case 'examdate': return <S_ExamDate onSave={() => setScreen('dashboard')} />
       // 세션 플로우: 개념(게이트 통과) → 다지기 → 채점 → 완료
       case 'concept': return <S_Concept stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
       case 'quiz': return <S_Quiz onClose={() => setScreen('dashboard')} onSubmit={() => setScreen('grade')} />
