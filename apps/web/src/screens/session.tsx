@@ -1,6 +1,6 @@
 // 풀스크린 학습 세션 — screens-session.jsx 이식.
 import { WF, TONE, type Tone } from '../design/tokens'
-import { Screen, StatusBar, Body, Card, Chip, Bar, Btn, Note, Marker } from '../design/kit'
+import { Screen, Body, Card, Chip, Bar, Btn, Marker } from '../design/kit'
 
 function SessHead({ done, total, right, onClose }: { done: number; total: number; right?: string; onClose?: () => void }) {
   return (
@@ -20,7 +20,6 @@ function SessHead({ done, total, right, onClose }: { done: number; total: number
 export function S_Pretest({ onClose }: { onClose?: () => void }) {
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={0} total={42} right="새 개념" onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 26 }}>
         <Chip tone="neutral">사전테스트</Chip>
@@ -29,10 +28,6 @@ export function S_Pretest({ onClose }: { onClose?: () => void }) {
         <div style={{ marginTop: 34, fontSize: 17, fontWeight: 600, lineHeight: 1.5 }}>미래완료의 형태는?</div>
         <div style={{ marginTop: 18, border: `1px solid ${WF.line}`, borderRadius: 12, padding: '15px 14px', color: WF.ink3, fontSize: 15 }}>답 입력…</div>
         <div style={{ marginTop: 18 }}><Btn primary>확인하기</Btn></div>
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <Note n="1">추측 제출 → 정답·해설만 공개 (LLM 호출 없음)</Note>
-          <Note n="2">wasPretest=true · 안정도 S 미반영 (인코딩 전 추락 방지)</Note>
-        </div>
       </Body>
     </Screen>
   )
@@ -45,7 +40,6 @@ export function S_Concept({ stage = 'input', onClose, onNext }: { stage?: 'input
   const filled = ok || low
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={20} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
         <Chip tone="neutral">개념 · 토익</Chip>
@@ -91,8 +85,7 @@ export function S_Concept({ stage = 'input', onClose, onNext }: { stage?: 'input
           )}
         </div>
         <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-          <Note n="1">자기설명을 LLM이 평가 → OK여야 다지기로 (인코딩 게이트)</Note>
-          <div style={{ marginTop: 10 }}>
+          <div>
             {ok
               ? <Btn primary onClick={onNext}>다지기 시작 ›</Btn>
               : <div style={{ textAlign: 'center', padding: '13px 18px', borderRadius: 10, background: WF.fill1, color: WF.ink3, fontSize: 15, fontWeight: 600, border: `1px solid ${WF.lineSoft}` }}>다지기 시작 ›</div>}
@@ -107,7 +100,6 @@ export function S_Concept({ stage = 'input', onClose, onNext }: { stage?: 'input
 export function S_Quiz({ onClose, onSubmit }: { onClose?: () => void; onSubmit?: () => void }) {
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={24} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
         <Chip tone="neutral">다지기 · 현재완료</Chip>
@@ -119,10 +111,6 @@ export function S_Quiz({ onClose, onSubmit }: { onClose?: () => void; onSubmit?:
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
           <span style={{ fontSize: 14 }}>💡</span><span>힌트 보기</span>
         </div>
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <Note n="1">mcq면 입력칸 대신 보기 버튼 → 동등비교·즉시 채점</Note>
-          <Note n="2">선접수-후채점: 제출 즉시 다음 카드, 결과는 비동기 패치</Note>
-        </div>
       </Body>
     </Screen>
   )
@@ -132,7 +120,6 @@ export function S_Quiz({ onClose, onSubmit }: { onClose?: () => void; onSubmit?:
 export function S_QuizMcq({ onClose }: { onClose?: () => void }) {
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={24} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
         <Chip tone="neutral">다지기 · mcq</Chip>
@@ -144,7 +131,6 @@ export function S_QuizMcq({ onClose }: { onClose?: () => void }) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 'auto', paddingTop: 16 }}><Note>mcq = 동등비교, LLM 호출 없음 — 즉시 채점</Note></div>
       </Body>
     </Screen>
   )
@@ -154,7 +140,6 @@ export function S_QuizMcq({ onClose }: { onClose?: () => void }) {
 export function S_Grading({ onClose }: { onClose?: () => void }) {
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={26} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
         <Chip tone="neutral">다지기 · 다음 카드</Chip>
@@ -165,10 +150,6 @@ export function S_Grading({ onClose }: { onClose?: () => void }) {
         <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', gap: 10, border: `1px dashed ${WF.line}`, borderRadius: 10, padding: '11px 13px', background: WF.fill1 }}>
           <span style={{ width: 12, height: 12, borderRadius: 8, border: `2px solid ${WF.ink3}`, borderTopColor: WF.ink, flex: '0 0 auto' }} />
           <span style={{ fontSize: 12.5, color: WF.ink2 }}>이전 문항 <b>채점 중…</b> 도착 시 결과 패치</span>
-        </div>
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
-          <Note n="1">제출 → 즉시 다음 카드 (블로킹 없음)</Note>
-          <Note n="2">LLM 실패 시 결정적 폴백 또는 자가채점 화면으로 강등</Note>
         </div>
       </Body>
     </Screen>
@@ -187,7 +168,6 @@ export function S_Grade({ result = 'partial', onClose, onNext }: { result?: 'cor
   const selIdx = { correct: 2, partial: 2, wrong: 0 }[result]
   return (
     <Screen>
-      <StatusBar />
       <SessHead done={25} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -229,7 +209,6 @@ export function S_Summary({ onDone }: { onDone?: () => void }) {
   const stats: [string, string][] = [['42', '문항'], ['81%', '정답률'], ['23분', '학습시간']]
   return (
     <Screen>
-      <StatusBar />
       <Body style={{ paddingTop: 40, paddingLeft: 28, paddingRight: 28, gap: 0, alignItems: 'center', textAlign: 'center' }}>
         <div style={{ fontSize: 34 }}>🎉</div>
         <div style={{ fontSize: 24, fontWeight: 700, marginTop: 10 }}>완료!</div>

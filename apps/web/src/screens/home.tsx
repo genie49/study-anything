@@ -1,14 +1,13 @@
 // 홈 · 빈상태 · 트랙 대시보드 · 트랙 수정 · 로그인 — screens-home.jsx 이식.
 import { useState } from 'react'
 import { WF, TONE } from '../design/tokens'
-import { Screen, StatusBar, TopBar, Body, Card, Chip, Bar, Dday, Divider, Note, Btn, Field, Marker, InfoDot, HealthSheet, TabBar } from '../design/kit'
+import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Divider, Btn, Field, Marker, InfoDot, HealthSheet, TabBar } from '../design/kit'
 import { AppMark } from '../design/charts'
 
 // 0. 로그인 (구글 단독)
 export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
   return (
     <Screen>
-      <StatusBar />
       <Body style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 0, padding: 34 }}>
         <div style={{ marginBottom: 26 }}><AppMark size={64} /></div>
         <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.4px' }}>study-anything</div>
@@ -28,7 +27,6 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
             }}>G</span>
             Google로 계속하기
           </div>
-          <div style={{ marginTop: 16 }}><Note>로그인은 구글 OAuth 하나만</Note></div>
         </div>
       </Body>
     </Screen>
@@ -39,7 +37,6 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
 export function S_TrackList({ onOpen, onNav }: { onOpen?: () => void; onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="내 학습" big />
       <Body gap={12}>
         <div onClick={onOpen} style={{ cursor: 'pointer' }}>
@@ -70,9 +67,6 @@ export function S_TrackList({ onOpen, onNav }: { onOpen?: () => void; onNav?: (t
           </div>
           <div style={{ marginTop: 9, fontSize: 13, color: WF.ink3 }}>학습 계획 생성 대기</div>
         </Card>
-        <div style={{ marginTop: 'auto' }}>
-          <Note>＋ 추가 버튼 없음 — 트랙은 CLI(soul 스킬 + import) 전용</Note>
-        </div>
       </Body>
       <TabBar active="home" onNav={onNav} />
     </Screen>
@@ -83,7 +77,6 @@ export function S_TrackList({ onOpen, onNav }: { onOpen?: () => void; onNav?: (t
 export function S_Empty({ onNav }: { onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="내 학습" big />
       <Body pad={30} style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 0 }}>
         <div style={{ marginBottom: 22 }}><AppMark size={76} /></div>
@@ -101,7 +94,6 @@ export function S_Empty({ onNav }: { onNav?: (t: 'home' | 'today' | 'stats' | 's
             <span style={{ fontSize: 13.5, lineHeight: 1.5 }}><b>import</b> 스크립트로<br /><span style={{ color: WF.ink2 }}>DB에 입력</span></span>
           </div>
         </Card>
-        <div style={{ marginTop: 20 }}><Note>추가·삭제·아카이브는 프론트에서 불가</Note></div>
       </Body>
       <TabBar active="home" onNav={onNav} />
     </Screen>
@@ -113,7 +105,6 @@ export function S_Dashboard({ defaultInfo = false, onStart, onEdit, onBack }: { 
   const [info, setInfo] = useState(defaultInfo)
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="토익" back action={{ label: '수정' }} onBack={onBack} onAction={onEdit} />
       <Body gap={16}>
         <div style={{ textAlign: 'center', padding: '6px 0 2px' }}>
@@ -160,8 +151,7 @@ export function S_Dashboard({ defaultInfo = false, onStart, onEdit, onBack }: { 
 // 3. 트랙 수정 (이름·시험일만)
 export function S_Edit({ onBack, onSave }: { onBack?: () => void; onSave?: () => void }) {
   return (
-    <Screen h={620}>
-      <StatusBar />
+    <Screen>
       <TopBar title="토익 수정" back action={{ label: '저장', solid: true }} onBack={onBack} onAction={onSave} />
       <Body gap={22} style={{ paddingTop: 22 }}>
         <Field label="트랙 이름" value="토익" />
@@ -174,7 +164,6 @@ export function S_Edit({ onBack, onSave }: { onBack?: () => void; onSave?: () =>
             </span>
           </div>
         </Card>
-        <Note n="1">시험일 미설정 트랙은 이 화면에서 최초 지정 → 비로소 학습 계획 생성</Note>
       </Body>
     </Screen>
   )

@@ -12,11 +12,13 @@ type Screen =
 
 type Tab = 'home' | 'today' | 'stats' | 'settings'
 
-// 모바일 화면(375×812)을 중앙에 띄우는 캔버스.
+// 모바일 풀블리드, 데스크톱은 중앙 정렬된 모바일 폭(≤480) 컬럼. 폰 목업 프레임 없음.
 function Stage({ children }: { children: ReactNode }) {
   return (
-    <div style={{ minHeight: '100dvh', background: '#f3f1ee', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: 24, fontFamily: WF.sans }}>
-      <div style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.10)', borderRadius: 18 }}>{children}</div>
+    <div style={{ minHeight: '100dvh', background: '#e8e6e2', display: 'flex', justifyContent: 'center', fontFamily: WF.sans }}>
+      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: WF.paper, overflow: 'hidden', boxShadow: '0 0 0 1px rgba(0,0,0,0.05)' }}>
+        {children}
+      </div>
     </div>
   )
 }
