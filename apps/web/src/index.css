@@ -4,3 +4,7 @@
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: #e8e6e2; -webkit-font-smoothing: antialiased; }
+
+/* 업로드 스피너 / 완료 등장 애니메이션 */
+@keyframes wf-spin { to { transform: rotate(360deg); } }
+@keyframes wf-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

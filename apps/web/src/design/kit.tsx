@@ -202,6 +202,48 @@ export function Note({ children, n }: { children?: ReactNode; n?: number | strin
   )
 }
 
+// 회전하는 호 — 업로드 로딩. index.css의 wf-spin 키프레임 사용.
+export function Spinner({ size = 14, stroke = 2, dark = false }: { size?: number; stroke?: number; dark?: boolean }) {
+  return (
+    <span style={{
+      width: size, height: size, flex: '0 0 auto', display: 'inline-block',
+      border: `${stroke}px solid ${WF.fill3}`,
+      borderTopColor: dark ? WF.inkSolid : WF.lineStrong,
+      borderRadius: size, animation: 'wf-spin 0.8s linear infinite',
+    }} />
+  )
+}
+
+// 압축파일 글리프 — 업로드 드롭존/파일 카드.
+export function ZipGlyph({ size = 44 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 44 44" style={{ display: 'block', flex: '0 0 auto' }} aria-hidden>
+      <rect x="7" y="3.5" width="30" height="37" rx="4" fill="none" stroke={WF.lineStrong} strokeWidth="1.6" />
+      <g fill={WF.fill3}>
+        <rect x="20" y="6" width="4" height="4" /><rect x="20" y="13" width="4" height="4" /><rect x="20" y="20" width="4" height="4" />
+      </g>
+      <rect x="18.5" y="26" width="7" height="9" rx="1.5" fill="none" stroke={WF.lineStrong} strokeWidth="1.4" />
+      <text x="22" y="32.5" textAnchor="middle" fontFamily={WF.mono} fontSize="6" fill={WF.ink2}>zip</text>
+    </svg>
+  )
+}
+
+// 추가된 파일 카드 — busy면 스피너, 아니면 제거(×) 표시.
+export function FileCard({ name, size, busy = false, onRemove }: { name: string; size: string; busy?: boolean; onRemove?: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 13, border: `1px solid ${WF.line}`, borderRadius: 12, padding: '14px 15px' }}>
+      <ZipGlyph size={34} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontSize: 12, color: WF.ink2, fontFamily: WF.mono, marginTop: 2 }}>{size}</div>
+      </div>
+      {busy
+        ? <Spinner size={16} dark />
+        : <span onClick={onRemove} style={{ width: 22, height: 22, borderRadius: 11, border: `1px solid ${WF.line}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: WF.ink3, flex: '0 0 auto', cursor: onRemove ? 'pointer' : 'default' }}>×</span>}
+    </div>
+  )
+}
+
 export function Card({ children, style, strong = false }: { children?: ReactNode; style?: Style; strong?: boolean }) {
   return (
     <div style={{
