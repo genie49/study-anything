@@ -5,7 +5,7 @@ const getAccessToken = vi.fn<() => string | null>(() => 'tok-1')
 const tryRefresh = vi.fn<() => Promise<boolean>>(async () => false)
 vi.mock('./auth', () => ({ getAccessToken: () => getAccessToken(), tryRefresh: () => tryRefresh() }))
 
-import { getTracks, getSession, importZip, patchTrack, deleteTrack } from './api'
+import { getTracks, getSession, importZip, patchTrack, deleteTrack, submitAnswer } from './api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -75,6 +75,18 @@ describe('getSession', () => {
     const s = await getSession('t1')
     expect(s.total).toBe(1)
     expect(fetchMock.mock.calls[0][0]).toContain('/tracks/t1/session')
+  })
+})
+
+describe('submitAnswer', () => {
+  it('답안 제출 POST + result 반환', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { cardId: 'c1', score: 1, grade: 'good', correct: true, reason: 'ok', answer: 'a', explanation: 'e', dueAt: '2026-06-12T00:00:00.000Z', stage: 'consolidating' } }))
+    const r = await submitAnswer('t1', { stateId: 's1', cardId: 'c1', answer: 'a' })
+    expect(r.grade).toBe('good')
+    const [path, init] = fetchMock.mock.calls[0]
+    expect(path).toContain('/tracks/t1/session/answer')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(init?.body as string)).toEqual({ stateId: 's1', cardId: 'c1', answer: 'a' })
   })
 })
 

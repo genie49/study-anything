@@ -1,7 +1,8 @@
 // 풀스크린 학습 세션 — screens-session.jsx 이식.
+import { useState } from 'react'
 import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, Body, Card, Chip, Bar, Btn, Marker } from '../design/kit'
-import type { SessionItem } from '../api'
+import type { AnswerResult, SessionItem } from '../api'
 
 function SessHead({ done, total, right, onClose }: { done: number; total: number; right?: string; onClose?: () => void }) {
   return (
@@ -107,8 +108,9 @@ export function S_Concept({ item, done = 0, total = 42, stage = 'input', onClose
 
 // 5. 다지기 (입력형)
 export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
-  item?: SessionItem; done?: number; total?: number; onClose?: () => void; onSubmit?: () => void
+  item?: SessionItem; done?: number; total?: number; onClose?: () => void; onSubmit?: (answer: string) => void
 }) {
+  const [answer, setAnswer] = useState(item ? '' : 'has lived')
   return (
     <Screen>
       <SessHead done={done} total={total} onClose={onClose} />
@@ -117,10 +119,17 @@ export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
         <div style={{ fontSize: 22, fontWeight: 600, marginTop: 26, lineHeight: 1.5 }}>
           {item?.prompt ?? <>He <span style={{ borderBottom: `2px solid ${WF.ink}`, padding: '0 26px' }}>&nbsp;</span> (live) here since 2010.</>}
         </div>
-        <div style={{ marginTop: 30, border: `1px solid ${WF.lineStrong}`, borderRadius: 12, padding: '15px 14px', fontSize: 16, fontWeight: 500, color: item ? WF.ink3 : WF.ink }}>
-          {item ? '답 입력…' : 'has lived'}
-        </div>
-        <div style={{ marginTop: 14 }}><Btn primary onClick={onSubmit}>제출</Btn></div>
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder="답 입력…"
+          style={{
+            marginTop: 30, width: '100%', minHeight: 54, border: `1px solid ${WF.lineStrong}`, borderRadius: 12,
+            padding: '15px 14px', fontSize: 16, fontWeight: 500, color: WF.ink, background: WF.paper,
+            fontFamily: WF.sans, resize: 'none', outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+        <div style={{ marginTop: 14 }}><Btn primary onClick={() => onSubmit?.(answer)}>제출</Btn></div>
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
           <span style={{ fontSize: 14 }}>💡</span><span>{item?.hint ?? '힌트 보기'}</span>
         </div>
@@ -170,36 +179,45 @@ export function S_Grading({ onClose }: { onClose?: () => void }) {
 }
 
 // 6. 채점 결과
-export function S_Grade({ result = 'partial', onClose, onNext }: { result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void }) {
+export function S_Grade({ answerResult, result = 'partial', onClose, onNext }: {
+  answerResult?: AnswerResult; result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void
+}) {
   const R: Record<string, { tone: Tone; score: string; fill: number; label: string; reason: string }> = {
     correct: { tone: 'ok', score: '1.0', fill: 100, label: '정답', reason: '시제와 since 뒤 기간 해석까지 정확해요.' },
     partial: { tone: 'warn', score: '0.7', fill: 70, label: '부분정답', reason: '"시제는 맞았으나 since 뒤 기간 해석이 빠졌어요"' },
     wrong: { tone: 'danger', score: '0.0', fill: 0, label: '오답', reason: '"과거형(lived)을 썼어요. since+기간은 현재완료가 필요해요"' },
   }
-  const r = R[result]
+  const derived = answerResult
+    ? (answerResult.score >= 0.85 ? 'correct' : answerResult.score >= 0.5 ? 'partial' : 'wrong')
+    : result
+  const r = R[derived]
   const t = TONE[r.tone]
-  const selIdx = { correct: 2, partial: 2, wrong: 0 }[result]
+  const selIdx = { correct: 2, partial: 1, wrong: 0 }[derived]
+  const score = answerResult ? answerResult.score.toFixed(1) : r.score
+  const reason = answerResult?.reason ?? r.reason
+  const referenceAnswer = answerResult?.answer ?? 'has lived'
+  const explanation = answerResult?.explanation ?? 'since + 기간 → 현재완료. 과거형은 현재와 단절됩니다.'
   return (
     <Screen>
       <SessHead done={25} total={42} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 56, height: 56, borderRadius: 28, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `conic-gradient(${t.c} 0 ${r.fill}%, ${WF.fill2} ${r.fill}% 100%)` }}>
-            <span style={{ width: 44, height: 44, borderRadius: 22, background: WF.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: WF.mono, fontSize: 16, fontWeight: 700 }}>{r.score}</span>
+            <span style={{ width: 44, height: 44, borderRadius: 22, background: WF.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: WF.mono, fontSize: 16, fontWeight: 700 }}>{score}</span>
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Marker tone={r.tone} /><span style={{ fontSize: 18, fontWeight: 700 }}>{r.label}</span>
             </div>
-            <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3, marginTop: 3 }}>score {r.score} · LLM 채점</div>
+            <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3, marginTop: 3 }}>score {score} · {answerResult ? 'exact 채점' : 'LLM 채점'}</div>
           </div>
         </div>
-        <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.6, padding: '13px 14px', background: t.bg, border: `1px solid ${t.c}`, borderRadius: 12, color: WF.ink }}>{r.reason}</div>
+        <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.6, padding: '13px 14px', background: t.bg, border: `1px solid ${t.c}`, borderRadius: 12, color: WF.ink }}>{reason}</div>
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 13, color: WF.ink2 }}>정답</div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}>has lived</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}>{referenceAnswer}</div>
           <div style={{ fontSize: 13, color: WF.ink2, marginTop: 12 }}>해설</div>
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, color: WF.ink }}>since + 기간 → 현재완료. 과거형은 현재와 단절됩니다.</div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, color: WF.ink }}>{explanation}</div>
         </div>
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 12, color: WF.ink3, marginBottom: 8, fontFamily: WF.mono }}>자가 등급 보정 (선택)</div>

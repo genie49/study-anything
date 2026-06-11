@@ -95,6 +95,67 @@ describe('GET /tracks/:id/session', () => {
   })
 })
 
+describe('POST /tracks/:id/session/answer', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks/abc/session/answer', { method: 'POST' })).status).toBe(401)
+  })
+
+  it('정답 제출 → reviewLog 기록 + cardState 갱신', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '정답제출'
+    b.manifest.title = '정답제출'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const sessionRes = await app.request(`/tracks/${trackId}/session`, { headers: { authorization: await bearer(USER) } })
+    const { session } = await sessionRes.json() as { session: { items: { stateId: string; cardId: string }[] } }
+    const item = session.items[0]
+
+    const res = await app.request(`/tracks/${trackId}/session/answer`, {
+      method: 'POST',
+      headers: { authorization: await bearer(USER), 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'a', elapsedMs: 1200 }),
+    })
+    expect(res.status).toBe(200)
+    const { result } = await res.json() as { result: { grade: string; score: number; stage: string; answer: string } }
+    expect(result.grade).toBe('good')
+    expect(result.score).toBe(1)
+    expect(result.stage).toBe('consolidating')
+    expect(result.answer).toBe('a')
+
+    const trackObjectId = new ObjectId(trackId)
+    const state = await getDb().collection('cardStates').findOne({ userId: USER, trackId: trackObjectId })
+    expect(state?.reps).toBe(1)
+    expect(state?.S).toBeGreaterThan(0)
+    expect(state?.lastGrade).toBe('good')
+    expect(await getDb().collection('reviewLogs').countDocuments({ userId: USER, trackId: trackObjectId })).toBe(1)
+  })
+
+  it('오답 제출 → lapse 증가 + again', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '오답제출'
+    b.manifest.title = '오답제출'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const sessionRes = await app.request(`/tracks/${trackId}/session`, { headers: { authorization: await bearer(USER) } })
+    const { session } = await sessionRes.json() as { session: { items: { stateId: string; cardId: string }[] } }
+    const item = session.items[0]
+
+    const res = await app.request(`/tracks/${trackId}/session/answer`, {
+      method: 'POST',
+      headers: { authorization: await bearer(USER), 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'wrong' }),
+    })
+    expect(res.status).toBe(200)
+    const { result } = await res.json() as { result: { grade: string; score: number } }
+    expect(result.grade).toBe('again')
+    expect(result.score).toBe(0)
+
+    const state = await getDb().collection('cardStates').findOne({ userId: USER, trackId: new ObjectId(trackId) })
+    expect(state?.lapses).toBe(1)
+    expect(state?.lastGrade).toBe('again')
+  })
+})
+
 describe('PATCH /tracks/:id', () => {
   it('인증 없으면 401', async () => {
     const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })
