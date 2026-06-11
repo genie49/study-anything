@@ -1,22 +1,51 @@
 // 트랙 라우트 — import / 수정(이름·시험일) / 삭제. 전부 인증 필수(JWT→userId).
 // auth.md / data-pipeline §3 / frontend-screens.md(#3·#14·위험구역).
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { requireAuth, type AuthVars } from '../middleware/auth'
 import { validateBundle, importBundle, type SoulBundle } from './import'
+import { bundleFromZip } from './unzip'
 import { validateTrackPatch, updateTrack, deleteTrack, type TrackPatch } from './manage'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
 
-tracks.post('/import', requireAuth, async (c) => {
-  let body: unknown
-  try { body = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }
+// 업로드된 zip(멀티파트 'file' 또는 raw 바디)을 풀어 bundle로. 실패 시 에러 문자열 배열.
+async function bundleFromRequestZip(c: Context<{ Variables: AuthVars }>): Promise<{ bundle?: SoulBundle; errors: string[] }> {
+  const ct = c.req.header('content-type') ?? ''
+  let bytes: Uint8Array
+  if (ct.includes('multipart/form-data')) {
+    const body = await c.req.parseBody()
+    const file = body['file']
+    if (!(file instanceof File)) return { errors: ["multipart 'file' 필드(zip)가 필요합니다"] }
+    bytes = new Uint8Array(await file.arrayBuffer())
+  } else {
+    bytes = new Uint8Array(await c.req.arrayBuffer()) // application/zip | octet-stream 등 raw
+  }
+  if (!bytes.length) return { errors: ['빈 업로드'] }
+  return bundleFromZip(bytes)
+}
 
-  const errors = validateBundle(body)
+// 트랙 import — .soul 번들 적재.
+//   - application/json: { manifest, decks } 직접(CLI/하위호환)
+//   - multipart/form-data 또는 zip raw: 업로드된 .soul.zip을 서버에서 압축 해제(앱 #13)
+// 어느 경로든 같은 결정적 importBundle로 수렴.
+tracks.post('/import', requireAuth, async (c) => {
+  const ct = c.req.header('content-type') ?? ''
+  let bundle: unknown
+
+  if (ct.includes('application/json')) {
+    try { bundle = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }
+  } else {
+    const { bundle: b, errors } = await bundleFromRequestZip(c)
+    if (errors.length) return c.json({ error: 'invalid zip bundle', errors }, 400)
+    bundle = b
+  }
+
+  const errors = validateBundle(bundle)
   if (errors.length) return c.json({ error: 'invalid soul bundle', errors }, 400)
 
   const userId = c.get('userId')
   try {
-    const summary = await importBundle(userId, body as SoulBundle)
+    const summary = await importBundle(userId, bundle as SoulBundle)
     return c.json({ ok: true, ...summary })
   } catch (e) {
     return c.json({ error: 'import failed', detail: (e as Error).message }, 500)

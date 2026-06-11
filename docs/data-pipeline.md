@@ -132,7 +132,7 @@ flowchart LR
 ## 3단계 — import (`.soul.zip` → **인증 API** → DB)
 
 - **순수 결정적. LLM 없음.** 사용자가 ②의 산출물 **`.soul/{track}.zip`을 앱에서 업로드**(트랙 추가 → ZIP 업로드, [화면구조도](./frontend-screens.md))한다. 프론트가 그 zip을 **인증된 API `POST /tracks/import`에 multipart로 전송**(사용자 JWT 동봉) → API가 **서버에서 압축 해제**해 `manifest.json` + `decks/*.json`을 읽고 컬렉션에 upsert. (Mongo 직접 쓰기 아님 — 소유권을 JWT에서 도출하기 위함, [auth.md](./auth.md))
-- **현 구현 상태:** `POST /tracks/import`는 지금은 **JSON 본문**(`{manifest, decks}`)을 받는다([`apps/api/src/tracks/`](../apps/api/src/tracks/)). **zip multipart 수용 + 서버 압축 해제는 구현 예정** — 결정적 upsert 로직(`importBundle`)은 그대로 두고 **입력 어댑터(zip→bundle)만 앞단에 추가**한다.
+- **현 구현 상태(구현됨):** `POST /tracks/import`는 **multipart zip / raw zip / JSON** 모두 받는다([`apps/api/src/tracks/`](../apps/api/src/tracks/)). zip은 `unzip.ts`(`bundleFromZip`)가 서버에서 풀어 `manifest.json` + `decks/*.json`을 `SoulBundle`로 조립 → 기존 `validateBundle`/`importBundle`로 수렴. JSON 직접 본문도 하위호환으로 유지(CLI). 결정적 upsert 로직은 변경 없음.
 - **CLI 경로도 유효:** zip은 `pack_soul.py`가 만든 평범한 아카이브라, CLI/스크립트로 같은 zip을 만들어 같은 엔드포인트에 올려도 동일하게 동작한다(얇은 클라이언트). 프론트 업로드가 기본 경로일 뿐 CLI를 배제하지 않는다.
 - 매핑:
   - `manifest` → `tracks` (단 **`examDate`는 zip에 없음 → 유저 입력**: 업로드 직후 앱 **시험일 설정** 화면 #14)
@@ -196,10 +196,16 @@ flowchart LR
 - **트랙 추가 경로 → 앱 ZIP 업로드.** 스킬이 `.soul/{track}.zip`을 패킹(`pack_soul.py`)하고, 사용자가 앱에서 업로드한다(트랙 추가 → ZIP 업로드). CLI도 같은 zip·엔드포인트로 가능. (§3·[화면구조도](./frontend-screens.md))
 - **examDate 입력 경로 → 업로드 직후 앱 "시험일 설정" 화면(#14).** zip엔 examDate가 없다.
 
-**남은 결정 / 구현 대기:**
-- **[구현·우선] 트랙 examDate 쓰기 엔드포인트**(`PATCH /tracks/:id` 등) — 앱 **시험일 설정(#14)·트랙 수정(#3)** 이 호출. 업로드된 트랙은 examDate가 비어 학습 계획을 못 만들므로, **업로드 흐름을 실제로 완성하는 첫 백엔드 조각**(zip 어댑터보다 앞). 현재 프론트 #14의 "저장하고 학습 시작"은 화면 전환만 하고 영속화 경로가 없다.
-- **[구현] `POST /tracks/import` zip multipart 수용 + 서버 압축 해제** — 입력 어댑터만 추가, `importBundle`은 그대로. **어댑터는 zip에서 `manifest.json`을 읽고, `manifest.decks[].slug`마다 `decks/{slug}.json`을 읽어 `SoulBundle.decks`(평탄 배열)로 조립**한 뒤 기존 `validateBundle`/`importBundle`에 넘긴다(pack_soul.py가 덱을 파일별로 나눠 담으므로).
-- **[구현] user-initiated 트랙 삭제 엔드포인트** — 앱 수정 화면의 "위험 구역"(트랙 삭제)이 호출. import-time orphan soft-delete와는 별개의 신규 기능.
+**구현 완료(백엔드):**
+- ✅ **트랙 examDate/이름 쓰기** — `PATCH /tracks/:id`(#14·#3 영속화).
+- ✅ **zip multipart 수용 + 서버 압축 해제** — `POST /tracks/import`가 zip/JSON 모두 수용, `unzip.ts`가 `decks/*.json`을 배열로 조립.
+- ✅ **user-initiated 트랙 삭제** — `DELETE /tracks/:id` cascade hard-delete(위험 구역).
+
+**남은 구현:**
+- **프론트 ↔ 실제 API 배선** — 현재 전 화면 목업. #13 업로드를 `POST /tracks/import`(multipart) 실호출로, #14 저장을 `PATCH /tracks/:id`로, 위험구역 삭제를 `DELETE /tracks/:id`로 연결. access(JWT) 동봉.
+- **스케줄러 런타임(④)** — R(t)·간격·건강·트리아지 순수 계산(자격증명 불필요).
+
+**남은 결정:**
 - `.soul` gitignore 여부(생성물 vs 재현용 커밋).
 - 재가공 시 `soulHash` 변경 카드의 cardStates 마이그레이션(진도 유지 vs 리셋).
 - 스킬 출력 JSON 스키마 validate를 import 전단에 강제(미충족 시 import 실패).

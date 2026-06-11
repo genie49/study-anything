@@ -82,16 +82,17 @@ authMiddleware(c, next):
 
 | 메서드·경로 | 인증 | 본문 | 동작 |
 |---|---|---|---|
-| `POST /tracks/import` | access(JWT) | **(목표) multipart = soul `.zip`** / (현재) JSON = soul 번들(manifest + decks) | 서버가 zip을 압축 해제 → **JWT에서 userId 도출** → 트랙/덱/개념/카드 upsert + `cardStates` 초기화, 전부 그 userId로 스코프. orphan soft-delete([파이프라인 §3](./data-pipeline.md)) |
+| `POST /tracks/import` | access(JWT) | **multipart zip / raw zip / JSON**(manifest + decks) | zip이면 서버가 압축 해제(`unzip.ts`) → **JWT에서 userId 도출** → 트랙/덱/개념/카드 upsert + `cardStates` 초기화, 전부 그 userId로 스코프. orphan soft-delete([파이프라인 §3](./data-pipeline.md)) |
+| `PATCH /tracks/:id` | access(JWT) | `{ title?, examDate? }` | 이름·시험일 부분 수정(#3·#14). 소유자 스코프, 아니면 404 |
+| `DELETE /tracks/:id` | access(JWT) | — | 소유권 확인 후 자식 cascade 영구 삭제(위험 구역). 아니면 404 |
 
-- **현 구현:** 엔드포인트는 지금 **JSON 본문**을 받는다. **zip multipart 수용 + 서버 압축 해제는 구현 예정** — 결정적 upsert(`importBundle`)은 그대로, 입력 어댑터(zip→bundle)만 앞단에 추가.
-- **CLI도 유효:** zip은 평범한 아카이브라, CLI/스크립트로 같은 zip을 같은 엔드포인트에 올려도 동일 동작(얇은 클라이언트). 앱 업로드가 기본일 뿐.
+- **CLI도 유효:** zip은 평범한 아카이브라, CLI/스크립트로 같은 zip을 같은 엔드포인트에 올려도 동일 동작(얇은 클라이언트). 앱 업로드가 기본일 뿐. JSON 직접 본문도 하위호환 유지.
 - 결과: "단일유저 전제" 제거 → 한 인스턴스가 여러 구글 계정을 독립 지원. 트랙은 인증한 사용자에게 귀속. zip엔 유저 정보가 없고 소유권은 **JWT가 부여**한다.
 
 ## 프론트(web) 처리
 
 - **로그인 화면(#0)**: "Google로 계속하기" → `/auth/google`로 이동(리다이렉트). 콜백 후 홈.
-- **트랙 추가(#13)·시험일 설정(#14)**: 홈 `＋ 추가` 또는 빈 상태 CTA → zip 업로드 → 완료 → 시험일 설정 → 대시보드. 업로드는 access(JWT) 동봉 `POST /tracks/import`(multipart, 구현 예정), examDate는 업로드 후 별도 입력.
+- **트랙 추가(#13)·시험일 설정(#14)**: 홈 `＋ 추가` 또는 빈 상태 CTA → zip 업로드 → 완료 → 시험일 설정 → 대시보드. 업로드는 access(JWT) 동봉 `POST /tracks/import`(multipart), examDate는 업로드 후 `PATCH /tracks/:id`. (백엔드 구현됨 · **프론트 실호출 배선은 남음** — 현재 화면 목업)
 - accessToken은 **메모리(상태)에 보관**, 모든 요청에 `Authorization: Bearer`. localStorage 금지.
 - **앱 로드/401 시** `/auth/refresh`(쿠키 자동 동봉)로 access 침묵 재발급 → 실패하면 로그인 화면.
 - **로그아웃**(설정 #11) → `/auth/logout` → 메모리 토큰 폐기 → 로그인 화면.
