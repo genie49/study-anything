@@ -212,6 +212,32 @@ erDiagram
 }
 ```
 
+### 3.4 `users` — 사용자 (구글 신원). 모든 `userId`의 출처
+
+```jsonc
+{
+  "_id": "ObjectId",
+  "googleSub": "1078…",         // 구글 OIDC subject (고유·불변) — 유니크
+  "email": "you@gmail.com",
+  "name": "…", "picture": "https://…",
+  "createdAt": "…", "lastLoginAt": "…"
+}
+```
+- 로그인 창구는 **구글 OAuth 하나뿐**. 검증 후 upsert. `userId = users._id` 가 모든 사용자 데이터(`tracks/cardStates/…`)의 스코프 키 — **요청 본문이 아니라 JWT에서** 나온다([auth.md](./auth.md)).
+
+### 3.5 `refreshTokens` — 리프레시 토큰 (회전·취소의 진실원천)
+
+```jsonc
+{
+  "_id": "ObjectId", "userId": "ObjectId",
+  "tokenHash": "sha256:…",       // 원본 토큰은 저장 안 함(해시만)
+  "family": "uuid",               // 회전 체인 — 재사용 탐지 시 family 전체 취소
+  "userAgent": "…",
+  "createdAt": "…", "expiresAt": "…", "revokedAt": null
+}
+```
+- refresh **사용 시마다 회전**(old `revokedAt` 설정, new 발급). 회전된 토큰 재등장 = 탈취 → family 일괄 취소. **Redis가 아니라 Mongo**에 둠(Redis flush=전원 로그아웃 방지). 무상태 access의 즉시취소는 Redis denylist 담당([auth.md](./auth.md)).
+
 ---
 
 ## 4. 인덱스 & 트랙 독립성
@@ -225,9 +251,11 @@ cardStates:  { userId: 1, trackId: 1, dueAt: 1 }      // ★ 스케줄러 주 �
              { userId: 1, trackId: 1, stage: 1 }
              { userId: 1, trackId: 1, triaged: 1 }
 reviewLogs:  { trackId: 1, ts: -1 }, { cardId: 1, ts: -1 }
+users:         { googleSub: 1 } (unique), { email: 1 }
+refreshTokens: { tokenHash: 1 } (unique), { userId: 1 }, { expiresAt: 1 } (TTL)
 ```
 
-**독립성 보장:** 모든 스케줄링·집계 쿼리는 `{ userId, trackId }`로 시작. 토익 세션은 `trackId=토익`만 건드리므로 오픽/물리 cardStates를 절대 만지지 않음. 트랙별로 `examDate / config / health`가 따로라 강도·일정도 완전 분리.
+**독립성 보장:** 모든 스케줄링·집계 쿼리는 `{ userId, trackId }`로 시작하고, **`userId`는 인증 미들웨어가 JWT에서 주입**한다([auth.md](./auth.md)). 토익 세션은 `trackId=토익`만 건드리므로 오픽/물리 cardStates를 절대 만지지 않음. 트랙별로 `examDate / config / health`가 따로라 강도·일정도 완전 분리. **여러 구글 계정이 한 인스턴스에서 독립**(userId로 분리) — 기존 "단일유저 전제"는 폐기.
 
 ---
 
@@ -276,7 +304,7 @@ reviewLogs:  { trackId: 1, ts: -1 }, { cardId: 1, ts: -1 }
 
 ## 7. 열린 항목(다음 결정 대상)
 
-- 인증/유저 모델(`users`) 상세 — auth 방식 정해지면 확정.
+- ~~인증/유저 모델(`users`) 상세~~ — **확정**: 구글 OAuth + JWT(access/refresh), `users`·`refreshTokens` 추가([auth.md](./auth.md)).
 - `decks` 레이어를 MVP에서 생략하고 `concept.deckId`만 nullable로 둘지(소스가 1개뿐인 트랙).
 - FSRS 파라미터(c, S/D 갱신식 계수)를 전역 고정 vs 유저별 적합 — 초기엔 전역 고정, `reviewLogs` 쌓이면 적합.
 - 콘텐츠 버전/재가공 시 기존 `cardStates` 마이그레이션 정책(카드 prompt 수정 시 진도 유지 여부).

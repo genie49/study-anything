@@ -10,7 +10,7 @@
       ▼  ② .claude 스킬 (콘텐츠 생성 LLM 유일 지점)
 .soul/{track}/* (완제품 구조화 데이터)
       │
-      ▼  ③ import 스크립트 (순수 결정적, LLM 없음)
+      ▼  ③ import: CLI → 인증 API(JWT→userId) (순수 결정적, LLM 없음)
    MongoDB
       │
       ▼  ④ 학습 런타임 (순수 계산 + 채점) — 채점은 경량 LLM, mcq만 동등비교
@@ -23,7 +23,7 @@
 ```mermaid
 flowchart LR
   RAW[".raw/{track}/*.md<br/>유저 작성 원본"] -->|"② Claude 스킬<br/>(LLM)"| SOUL[".soul/{track}/*<br/>구조화 완제품"]
-  SOUL -->|"③ import 스크립트<br/>(결정적)"| DB[("MongoDB")]
+  SOUL -->|"③ CLI→인증 API<br/>(결정적·JWT)"| DB[("MongoDB")]
   DB -->|"④ 학습 런타임<br/>(계산·채점)"| APP["개념/다지기"]
   GEN(["🤖 콘텐츠 생성 LLM"]) -.오직 여기만.-> SOUL
   JUDGE(["🤖 채점 LLM<br/>(mcq 제외)"]) -.채점만.-> APP
@@ -129,9 +129,9 @@ flowchart LR
 
 ---
 
-## 3단계 — import 스크립트 (`.soul` → DB)
+## 3단계 — import (`.soul` → **인증 API** → DB)
 
-- **순수 결정적. LLM 없음.** `.soul/{track}/**`를 읽어 컬렉션에 upsert.
+- **순수 결정적. LLM 없음.** CLI 스크립트가 `.soul/{track}/**`를 읽어 **인증된 API `POST /tracks/import`에 JSON으로 POST**(사용자 JWT 동봉)한다. API가 그 본문을 컬렉션에 upsert. (Mongo 직접 쓰기 아님 — 소유권을 JWT에서 도출하기 위함, [auth.md](./auth.md))
 - 매핑:
   - `manifest` → `tracks` (단 **`examDate`는 유저 입력**으로 받음: CLI 인자 또는 앱 트랙 생성 폼)
   - `decks[]` → `decks`
@@ -141,7 +141,7 @@ flowchart LR
 - **Idempotent:** `conceptKey/cardKey`를 안정 외부키로 저장(`cards.soulKey`) → 재가공 시 콘텐츠 갱신, **진도(cardStates) 보존**.
 - 재가공으로 prompt/answer가 바뀐 카드는 `soulHash` 비교로 감지 → 정책에 따라 진도 유지 또는 리셋(§7).
 - **★ Orphan(삭제) 정책 — 필수:** 재가공 시 LLM이 이전에 있던 카드를 **더는 안 만들 수 있다.** upsert만 하면 그 카드가 DB에 남아 `dueAt≤now` 스케줄러에 계속 잡히는 **좀비 카드**가 된다. → import는 `{userId,trackId}` 범위의 **기존 soulKey 집합과 새 `.soul`의 soulKey 집합을 diff**해, 빠진 카드를 **soft-delete(`status:"archived"`)** 하고 스케줄러 쿼리에서 제외(`status:"active"` 조건 추가). 해당 cardStates도 함께 비활성.
-- **★ 유저 네임스페이스:** `.raw/.soul`은 `{trackName}`만으로 키잉되어 **유저 구분이 없다.** `trackSlug:"토익"`은 유저 간 충돌하므로 **import가 `userId`를 주입**(examDate와 동일 경로)하고, `trackSlug/soulKey` 유일성은 항상 `{userId, …}`로 스코프. **현 파이프라인은 암묵적으로 단일 유저/로컬 작성 전제** — 멀티유저 SaaS화 시 업로드→유저별 작업공간 매핑 단계가 ③ 앞에 추가되어야 함.
+- **★ 유저 네임스페이스:** `.raw/.soul`은 `{trackName}`만으로 키잉되어 **유저 구분이 없다.** `trackSlug:"토익"`은 유저 간 충돌하므로 **API가 JWT에서 `userId`를 도출해 주입**하고, `trackSlug/soulKey` 유일성은 항상 `{userId, …}`로 스코프. 이제 **여러 구글 계정이 한 인스턴스에서 독립**(단일유저 전제 폐기). CLI는 `.soul`을 읽어 사용자 토큰으로 import API를 호출하는 얇은 클라이언트일 뿐 — 별도 "유저 매핑 단계"는 JWT가 대신한다.
 
 ---
 
@@ -189,11 +189,11 @@ flowchart LR
 
 **확정(이번 검토 반영):**
 - Orphan 삭제 → soft-delete(`status:"archived"`) + 스케줄러 제외. (§3)
-- 유저 네임스페이스 → 현 파이프라인 단일 유저/로컬 전제, `userId`는 import가 주입. (§3)
+- 유저 네임스페이스 → import는 **인증 API 경유**, `userId`는 JWT에서 도출. 멀티 구글 계정 독립(단일유저 전제 폐기). (§3·[auth.md](./auth.md))
 - 채점 → **일괄 경량 LLM 위임**(`{score,reason}`), `mcq`만 동등비교. `grading`은 선택적 폴백. 자가채점 단독 성공은 숙달 승급 보류. (§2·[runtime-grading.md](./runtime-grading.md))
 
 **남은 결정:**
 - `.soul` gitignore 여부(생성물 vs 재현용 커밋).
 - 재가공 시 `soulHash` 변경 카드의 cardStates 마이그레이션(진도 유지 vs 리셋).
-- import 시 examDate 입력 경로(CLI 인자 vs 앱 폼).
+- import 시 examDate 입력 경로(import API 인자 vs 앱 트랙 수정 폼 #3 — 후자가 기본).
 - 스킬 출력 JSON 스키마 validate를 import 전단에 강제(미충족 시 import 실패).

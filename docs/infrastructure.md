@@ -53,6 +53,9 @@ pnpm test  # 전체 워크스페이스 테스트(vitest)
 |---|---|---|
 | `GEMINI_API_KEY` | 런타임 채점 LLM | **서버(api)만**, 절대 프론트 노출 금지 |
 | `GRADER_MODEL` | 채점 모델 | 기본 `gemini-3.1-flash-lite` |
+| `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | 구글 OAuth | 서버만([auth.md](./auth.md)) |
+| `JWT_SECRET` · `ACCESS_TTL` · `REFRESH_TTL` | JWT 서명·수명 | 서버만 |
+| `WEB_ORIGIN` | CORS·쿠키 origin | 프론트 주소 |
 | `MONGO_URL` | Mongo 접속 | compose는 `mongodb://mongo:27017/study` 주입 |
 | `REDIS_URL` | Redis 접속 | compose는 `redis://redis:6379` 주입 |
 | `PORT` | api 포트 | 기본 8787 |
