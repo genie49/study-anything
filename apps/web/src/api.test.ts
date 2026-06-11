@@ -80,7 +80,7 @@ describe('getSession', () => {
 
 describe('submitAnswer', () => {
   it('답안 제출 POST + result 반환', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { cardId: 'c1', score: 1, grade: 'good', correct: true, reason: 'ok', answer: 'a', explanation: 'e', dueAt: '2026-06-12T00:00:00.000Z', stage: 'consolidating' } }))
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { cardId: 'c1', score: 1, grade: 'good', correct: true, graderMode: 'exact', reason: 'ok', answer: 'a', explanation: 'e', dueAt: '2026-06-12T00:00:00.000Z', stage: 'consolidating' } }))
     const r = await submitAnswer('t1', { stateId: 's1', cardId: 'c1', answer: 'a' })
     expect(r.grade).toBe('good')
     const [path, init] = fetchMock.mock.calls[0]

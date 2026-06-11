@@ -116,9 +116,10 @@ describe('POST /tracks/:id/session/answer', () => {
       body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'a', elapsedMs: 1200 }),
     })
     expect(res.status).toBe(200)
-    const { result } = await res.json() as { result: { grade: string; score: number; stage: string; answer: string } }
+    const { result } = await res.json() as { result: { grade: string; score: number; stage: string; answer: string; graderMode: string } }
     expect(result.grade).toBe('good')
     expect(result.score).toBe(1)
+    expect(result.graderMode).toBe('exact')
     expect(result.stage).toBe('consolidating')
     expect(result.answer).toBe('a')
 
@@ -127,7 +128,8 @@ describe('POST /tracks/:id/session/answer', () => {
     expect(state?.reps).toBe(1)
     expect(state?.S).toBeGreaterThan(0)
     expect(state?.lastGrade).toBe('good')
-    expect(await getDb().collection('reviewLogs').countDocuments({ userId: USER, trackId: trackObjectId })).toBe(1)
+    const log = await getDb().collection('reviewLogs').findOne({ userId: USER, trackId: trackObjectId })
+    expect(log?.graderMode).toBe('exact')
   })
 
   it('오답 제출 → lapse 증가 + again', async () => {

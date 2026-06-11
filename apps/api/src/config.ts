@@ -6,6 +6,11 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET ?? 'dev-insecure-secret-change-me',
   accessTtlSec: parseTtl(process.env.ACCESS_TTL ?? '15m'),
   refreshTtlSec: parseTtl(process.env.REFRESH_TTL ?? '30d'),
+  grader: {
+    apiKey: process.env.GEMINI_API_KEY ?? '',
+    model: process.env.GRADER_MODEL ?? 'gemini-3.1-flash-lite',
+    timeoutMs: Number(process.env.GRADER_TIMEOUT_MS ?? 4000),
+  },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',

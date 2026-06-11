@@ -2,6 +2,7 @@
 // 상태 갱신/채점은 다음 증분에서 처리하고, 여기서는 "무엇을 보여줄지"만 반환한다.
 import { ObjectId } from 'mongodb'
 import { getDb } from '../db/mongo'
+import { gradeCardAnswer, type GraderMode } from '../grading/grader'
 import { computeTrackPlan } from '../scheduler/plan'
 import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '../scheduler/memory'
 
@@ -111,29 +112,12 @@ export type AnswerResult = {
   score: number
   grade: Grade
   correct: boolean
+  graderMode: GraderMode
   reason: string
   answer: string
   explanation: string
   dueAt: string
   stage: string
-}
-
-function normalizeAnswer(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function gradeAnswer(card: { type?: string; answer?: string; explanation?: string }, learnerAnswer: string): Pick<AnswerResult, 'score' | 'grade' | 'correct' | 'reason'> {
-  const expected = normalizeAnswer(card.answer ?? '')
-  const actual = normalizeAnswer(learnerAnswer)
-  const correct = !!expected && actual === expected
-  return {
-    score: correct ? 1 : 0,
-    grade: correct ? 'good' : 'again',
-    correct,
-    reason: correct
-      ? '정답이에요. 참조 정답과 일치합니다.'
-      : '아직 달라요. 정답과 해설을 보고 다시 떠올려 보세요.',
-  }
 }
 
 function dayKey(d: Date): string {
@@ -154,7 +138,7 @@ export async function submitSessionAnswer(userId: string, trackId: string, input
   ])
   if (!track || !state || !card) return null
 
-  const graded = gradeAnswer(card as { type?: string; answer?: string; explanation?: string }, input.answer)
+  const graded = await gradeCardAnswer(card as { type?: string; prompt?: string; answer?: string; explanation?: string; grading?: Record<string, unknown> | null }, input.answer)
   const prevS = state.S ?? 0
   const prevD = state.D ?? 0.3
   const prevReps = state.reps ?? 0
@@ -186,7 +170,7 @@ export async function submitSessionAnswer(userId: string, trackId: string, input
     learnerAnswer: input.answer,
     elapsedMs: input.elapsedMs ?? null,
     wasPretest: false,
-    graderMode: card.type === 'mcq' ? 'mcq' : 'exact',
+    graderMode: graded.mode,
     rAtReview: scheduled.R,
     sBefore: prevS,
     sAfter: scheduled.S,
@@ -216,6 +200,7 @@ export async function submitSessionAnswer(userId: string, trackId: string, input
     score: graded.score,
     grade: graded.grade,
     correct: graded.correct,
+    graderMode: graded.mode,
     reason: graded.reason,
     answer: (card.answer as string) ?? '',
     explanation: (card.explanation as string) ?? '',

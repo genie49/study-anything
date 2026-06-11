@@ -21,6 +21,7 @@ export type SessionItem = {
 export type SessionQueue = { trackId: string; total: number; items: SessionItem[] }
 export type AnswerResult = {
   cardId: string; score: number; grade: 'again' | 'hard' | 'good' | 'easy'; correct: boolean
+  graderMode: 'llm' | 'mcq' | 'exact'
   reason: string; answer: string; explanation: string; dueAt: string; stage: string
 }
 
