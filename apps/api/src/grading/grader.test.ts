@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { gradeCardAnswer } from './grader'
+import { gradeCardAnswer } from './grader.js'
 
 const qa = { type: 'qa', prompt: 'q', answer: 'has lived', explanation: 'e' }
 

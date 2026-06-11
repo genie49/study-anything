@@ -1,6 +1,6 @@
 // 스케줄 건강 상태기계 + 실현가능성 — 순수 함수. learning-algorithm-detail.md §5.5.
 // ⚠️ BEHIND는 원인이 둘이고 처방이 정반대다(과부하 vs 숙달부족) — 절대 하나로 합치지 않는다.
-import { requiredTotalSessions } from './memory'
+import { requiredTotalSessions } from './memory.js'
 
 export type HealthState =
   | 'no_exam'         // 시험일 미설정 → 계획 생성 불가

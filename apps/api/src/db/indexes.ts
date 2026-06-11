@@ -1,6 +1,6 @@
 // 인덱스 생성 — data-model.md §4. 멱등(createIndex는 동일 정의면 no-op).
 // boot 경로에서만 호출(server.ts). 테스트는 connectMongo만 쓰므로 비용 없음.
-import { getDb } from './mongo'
+import { getDb } from './mongo.js'
 
 export async function ensureIndexes(): Promise<void> {
   const db = getDb()

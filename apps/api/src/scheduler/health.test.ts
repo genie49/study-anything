@@ -1,6 +1,6 @@
 // 건강 상태기계 + 실현가능성 — 불변식. learning-algorithm-detail.md §5.5.
 import { describe, it, expect } from 'vitest'
-import { healthState, feasibility, type HealthInput } from './health'
+import { healthState, feasibility, type HealthInput } from './health.js'
 
 const base: HealthInput = {
   examSet: true, daysLeft: 14, backlog: 0, dueToday: 5,

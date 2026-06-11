@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTtl } from './config'
+import { parseTtl } from './config.js'
 
 describe('parseTtl', () => {
   it('단위 파싱', () => {

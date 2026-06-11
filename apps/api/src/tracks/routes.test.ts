@@ -6,15 +6,15 @@ import { ObjectId } from 'mongodb'
 
 // requireAuth가 호출하는 denylist 조회만 무력화(Redis 불필요).
 vi.mock('../auth/store', async (orig) => ({
-  ...(await orig<typeof import('../auth/store')>()),
+  ...(await orig<typeof import('../auth/store.js')>()),
   isDenied: async () => false,
 }))
 
 import { zipSync, strToU8 } from 'fflate'
-import app from '../app'
-import { connectMongo, closeMongo, getDb } from '../db/mongo'
-import { signAccess } from '../auth/jwt'
-import { importBundle, type SoulBundle } from './import'
+import app from '../app.js'
+import { connectMongo, closeMongo, getDb } from '../db/mongo.js'
+import { signAccess } from '../auth/jwt.js'
+import { importBundle, type SoulBundle } from './import.js'
 
 let mongod: MongoMemoryServer
 const USER = 'user-route-1'

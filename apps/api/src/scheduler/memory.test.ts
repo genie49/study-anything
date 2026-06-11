@@ -4,7 +4,7 @@ import {
   retrievability, intervalForTarget, targetRetention, requiredTotalSessions, remainingSessions,
   capToExam, updateDifficulty, updateStability, schedule, isGraduated, DECAY_C,
   type CardMemory, type Grade,
-} from './memory'
+} from './memory.js'
 
 describe('retrievability R(t)', () => {
   it('갓 복습(t=0)은 1, S≤0은 0', () => {

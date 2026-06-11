@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { config } from './config'
-import { auth } from './auth/routes'
-import { tracks } from './tracks/routes'
-import type { AuthVars } from './middleware/auth'
+import { config } from './config.js'
+import { auth } from './auth/routes.js'
+import { tracks } from './tracks/routes.js'
+import type { AuthVars } from './middleware/auth.js'
 
 // Hono 앱 정의만 분리 → 테스트에서 서버를 띄우지 않고 app.request()로 검증.
 export const app = new Hono<{ Variables: AuthVars }>()

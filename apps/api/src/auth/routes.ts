@@ -2,11 +2,11 @@
 import { Hono } from 'hono'
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie'
 import { randomUUID } from 'node:crypto'
-import { config } from '../config'
-import { signAccess, signRefresh, verifyAccess, verifyRefresh } from './jwt'
-import { createAuthRequest, handleCallback } from './google'
-import { upsertUser, getUser, storeRefresh, consumeRefresh, revokeFamily, denyAccess, type GoogleProfile } from './store'
-import { requireAuth, type AuthVars } from '../middleware/auth'
+import { config } from '../config.js'
+import { signAccess, signRefresh, verifyAccess, verifyRefresh } from './jwt.js'
+import { createAuthRequest, handleCallback } from './google.js'
+import { upsertUser, getUser, storeRefresh, consumeRefresh, revokeFamily, denyAccess, type GoogleProfile } from './store.js'
+import { requireAuth, type AuthVars } from '../middleware/auth.js'
 
 const REFRESH_COOKIE = 'refresh'
 const HINT_COOKIE = 'sa_session' // 읽기 가능(httpOnly 아님). 토큰 아님 — 프론트가 "세션 흔적"만 판별해 불필요한 refresh 401 방지.

@@ -2,9 +2,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import { ObjectId } from 'mongodb'
-import { connectMongo, closeMongo, getDb } from '../db/mongo'
-import { importBundle, type SoulBundle } from './import'
-import { validateTrackPatch, updateTrack, deleteTrack, listTracks } from './manage'
+import { connectMongo, closeMongo, getDb } from '../db/mongo.js'
+import { importBundle, type SoulBundle } from './import.js'
+import { validateTrackPatch, updateTrack, deleteTrack, listTracks } from './manage.js'
 
 let mongod: MongoMemoryServer
 const USER = 'user-manage-1'

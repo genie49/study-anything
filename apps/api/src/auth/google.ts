@@ -1,9 +1,9 @@
 // 구글 OAuth (Authorization Code + PKCE) — google-auth-library. auth.md.
 import { OAuth2Client, CodeChallengeMethod } from 'google-auth-library'
 import { randomBytes } from 'node:crypto'
-import { config, assertGoogleConfigured } from '../config'
-import { getRedis } from '../db/redis'
-import type { GoogleProfile } from './store'
+import { config, assertGoogleConfigured } from '../config.js'
+import { getRedis } from '../db/redis.js'
+import type { GoogleProfile } from './store.js'
 
 function client() {
   assertGoogleConfigured()

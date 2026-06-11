@@ -1,8 +1,8 @@
 // GET /tracks/:id/plan 로더 — 트랙 + cardStates를 읽어 무동결 플랜을 런타임 계산.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
-import { computeTrackPlan, type TrackPlan, type CardStateLike } from '../scheduler/plan'
-import { avgRExam, recordSnapshot } from './snapshots'
+import { getDb } from '../db/mongo.js'
+import { computeTrackPlan, type TrackPlan, type CardStateLike } from '../scheduler/plan.js'
+import { avgRExam, recordSnapshot } from './snapshots.js'
 
 export async function getTrackPlan(userId: string, trackId: string, now = new Date()): Promise<TrackPlan | null> {
   if (!ObjectId.isValid(trackId)) return null

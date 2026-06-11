@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { signAccess, signRefresh, verifyAccess, verifyRefresh } from './jwt'
+import { signAccess, signRefresh, verifyAccess, verifyRefresh } from './jwt.js'
 
 describe('jwt', () => {
   it('access 토큰 왕복', async () => {

@@ -1,8 +1,8 @@
 // zip → SoulBundle 조립 테스트. fflate.zipSync로 pack_soul.py 레이아웃을 모사.
 import { describe, it, expect } from 'vitest'
 import { zipSync, strToU8 } from 'fflate'
-import { bundleFromZip } from './unzip'
-import { validateBundle } from './import'
+import { bundleFromZip } from './unzip.js'
+import { validateBundle } from './import.js'
 
 const MANIFEST = { soulVersion: 1, trackSlug: '토익', title: '토익', decks: [{ slug: 'd1', title: 'Deck 1', order: 1 }] }
 const DECK = {

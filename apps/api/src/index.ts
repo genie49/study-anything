@@ -1,9 +1,9 @@
-import './env' // .env 로드 — config 평가 전에 가장 먼저
+import './env.js' // .env 로드 — config 평가 전에 가장 먼저
 import { serve } from '@hono/node-server'
-import app from './app'
-import { connectMongo } from './db/mongo'
-import { connectRedis } from './db/redis'
-import { ensureIndexes } from './db/indexes'
+import app from './app.js'
+import { connectMongo } from './db/mongo.js'
+import { connectRedis } from './db/redis.js'
+import { ensureIndexes } from './db/indexes.js'
 
 const port = Number(process.env.PORT ?? 8787)
 

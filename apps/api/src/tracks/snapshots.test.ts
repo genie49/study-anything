@@ -1,7 +1,7 @@
 // 스냅샷 — avgRExam·localDay 불변식(시험 미설정/학습 전 null·경계·감쇠 단조).
 import { describe, it, expect } from 'vitest'
-import { avgRExam, localDay } from './snapshots'
-import type { CardStateLike } from '../scheduler/plan'
+import { avgRExam, localDay } from './snapshots.js'
+import type { CardStateLike } from '../scheduler/plan.js'
 
 const NOW = new Date(2026, 5, 11)          // 2026-06-11 로컬
 const EXAM = new Date(2026, 6, 11)          // 30일 후

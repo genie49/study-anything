@@ -1,7 +1,7 @@
 // .soul 번들 → DB 결정적 upsert. userId는 호출자(JWT)가 주입. auth.md / data-pipeline §3.
 import { createHash } from 'node:crypto'
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
+import { getDb } from '../db/mongo.js'
 
 const CARD_TYPES = new Set(['cloze', 'qa', 'mcq', 'application'])
 

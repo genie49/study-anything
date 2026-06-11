@@ -1,7 +1,7 @@
 // 일일 플랜 — cardStates에서 오늘 학습을 런타임 재계산(무동결). 순수 함수.
 // learning-algorithm-detail.md §5.5·§7. DB 비의존(상태 배열을 받음) → 단위테스트 가능.
-import { retrievability, targetRetention, daysBetween, requiredTotalSessions } from './memory'
-import { healthState, feasibility, type HealthState } from './health'
+import { retrievability, targetRetention, daysBetween, requiredTotalSessions } from './memory.js'
+import { healthState, feasibility, type HealthState } from './health.js'
 
 // cardStates 한 행의 스케줄 관련 필드(DB 형태와 무관한 최소 표면).
 export type CardStateLike = {
