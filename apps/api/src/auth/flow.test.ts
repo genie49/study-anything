@@ -9,9 +9,9 @@ vi.mock('./google', () => ({
   handleCallback: async () => ({ sub: 'google-sub-1', email: 'a@b.com', name: '홍길동', picture: 'http://p' }),
 }))
 
-import app from '../app'
-import { connectMongo, closeMongo } from '../db/mongo'
-import { ensureIndexes } from '../db/indexes'
+import app from '../app.js'
+import { connectMongo, closeMongo } from '../db/mongo.js'
+import { ensureIndexes } from '../db/indexes.js'
 
 let mongod: MongoMemoryServer
 
@@ -43,7 +43,7 @@ describe('auth flow (google 모킹)', () => {
     expect(res.status).toBe(302)
     expect(refreshCookie(res)).toMatch(/^refresh=/)
     // 사용자 upsert 됐는지
-    const { getDb } = await import('../db/mongo')
+    const { getDb } = await import('../db/mongo.js')
     expect(await getDb().collection('users').countDocuments({ googleSub: 'google-sub-1' })).toBe(1)
   })
 
@@ -91,7 +91,7 @@ describe('POST /auth/dev/login (dev 전용)', () => {
     expect(refreshCookie(res)).toBeTruthy() // refresh 쿠키 set
 
     // 발급된 access가 유효(서명 검증)하고 sub가 채워졌는지(Redis 불필요 — verifyAccess 직접)
-    const { verifyAccess } = await import('./jwt')
+    const { verifyAccess } = await import('./jwt.js')
     const payload = await verifyAccess(body.accessToken)
     expect(payload.sub).toBeTruthy()
   })
@@ -99,7 +99,7 @@ describe('POST /auth/dev/login (dev 전용)', () => {
   it('재호출해도 같은 계정(중복 생성 없음)', async () => {
     await app.request('/auth/dev/login', { method: 'POST' })
     await app.request('/auth/dev/login', { method: 'POST' })
-    const { getDb } = await import('../db/mongo')
+    const { getDb } = await import('../db/mongo.js')
     expect(await getDb().collection('users').countDocuments({ googleSub: 'dev-test-account' })).toBe(1)
   })
 })

@@ -1,7 +1,7 @@
 // JWT access/refresh 발급·검증 (HS256, hono/jwt). auth.md.
 import { sign, verify } from 'hono/jwt'
 import { randomUUID } from 'node:crypto'
-import { config } from '../config'
+import { config } from '../config.js'
 
 export type AccessPayload = { sub: string; jti: string; typ: 'access'; exp: number; iat: number }
 export type RefreshPayload = { sub: string; jti: string; family: string; typ: 'refresh'; exp: number; iat: number }

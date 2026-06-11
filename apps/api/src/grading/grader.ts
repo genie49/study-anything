@@ -1,7 +1,7 @@
 // 런타임 채점기 — mcq는 결정적 비교, 나머지는 Gemini LLM 사용 후 실패 시 exact 폴백.
 // runtime-grading.md: LLM은 참조정답/해설을 적용만 하며 콘텐츠를 생성하지 않는다.
-import { config } from '../config'
-import type { Grade } from '../scheduler/memory'
+import { config } from '../config.js'
+import type { Grade } from '../scheduler/memory.js'
 
 export type GraderMode = 'llm' | 'mcq' | 'exact'
 

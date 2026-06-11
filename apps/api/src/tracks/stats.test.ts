@@ -1,7 +1,7 @@
 // 트랙 통계 집계 — 불변식(프리테스트 제외·정답률·진행률·7일 버킷). 매직 수치 아님.
 import { describe, it, expect } from 'vitest'
-import { computeTrackStats, type ReviewLogLike } from './stats'
-import type { CardStateLike } from '../scheduler/plan'
+import { computeTrackStats, type ReviewLogLike } from './stats.js'
+import type { CardStateLike } from '../scheduler/plan.js'
 
 const NOW = new Date('2026-06-11T09:00:00')
 const st = (stage: string): CardStateLike => ({ stage, S: 1, D: 0.3, dueAt: NOW, reps: 1, lapses: 0 })

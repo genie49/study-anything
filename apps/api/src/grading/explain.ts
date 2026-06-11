@@ -1,7 +1,7 @@
 // 자기설명("왜?") 코치 — 개념 본문·모범 설명을 기준으로 학습자의 자기설명이 핵심을 담았는지
 // LLM이 판단하고 한국어 피드백을 준다. learning-algorithm-detail.md §2(인코딩) · learning-science-research.md.
 // 카드 채점기(grader.ts)와 같은 Gemini 패턴을 쓰되, 참조는 정답이 아니라 개념의 elaboration(모범 자기설명)이다.
-import { config } from '../config'
+import { config } from '../config.js'
 
 export type ExplainConcept = { title?: string; bodyMd?: string; elaboration?: string }
 export type ExplainFeedback = {

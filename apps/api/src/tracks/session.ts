@@ -1,11 +1,11 @@
 // 학습 세션 큐 로더 — 현재 cardStates에서 오늘 시작할 실제 카드 목록을 만든다.
 // 상태 갱신/채점은 다음 증분에서 처리하고, 여기서는 "무엇을 보여줄지"만 반환한다.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
-import { gradeCardAnswer, type GraderMode } from '../grading/grader'
-import { computeTrackPlan } from '../scheduler/plan'
-import { interleaveSession } from '../scheduler/session-order'
-import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '../scheduler/memory'
+import { getDb } from '../db/mongo.js'
+import { gradeCardAnswer, type GraderMode } from '../grading/grader.js'
+import { computeTrackPlan } from '../scheduler/plan.js'
+import { interleaveSession } from '../scheduler/session-order.js'
+import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '../scheduler/memory.js'
 
 export type SessionItem = {
   stateId: string

@@ -1,15 +1,15 @@
 // 트랙 라우트 — import / 수정(이름·시험일) / 삭제. 전부 인증 필수(JWT→userId).
 // auth.md / data-pipeline §3 / frontend-screens.md(#3·#14·위험구역).
 import { Hono, type Context } from 'hono'
-import { requireAuth, type AuthVars } from '../middleware/auth'
-import { validateBundle, importBundle, type SoulBundle } from './import'
-import { bundleFromZip } from './unzip'
-import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
-import { getTrackPlan } from './plan'
-import { getTrackStats } from './stats'
-import { getTrackSnapshots } from './snapshots'
-import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session'
-import { getExplanationFeedback } from './explain'
+import { requireAuth, type AuthVars } from '../middleware/auth.js'
+import { validateBundle, importBundle, type SoulBundle } from './import.js'
+import { bundleFromZip } from './unzip.js'
+import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage.js'
+import { getTrackPlan } from './plan.js'
+import { getTrackStats } from './stats.js'
+import { getTrackSnapshots } from './snapshots.js'
+import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session.js'
+import { getExplanationFeedback } from './explain.js'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
 

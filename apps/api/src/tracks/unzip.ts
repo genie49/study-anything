@@ -2,7 +2,7 @@
 // pack_soul.py 레이아웃: zip 루트에 manifest.json + decks/{slug}.json.
 // 결정적 upsert(importBundle)는 그대로 — 이 모듈은 zip을 풀어 bundle로 조립만 한다.
 import { unzipSync, strFromU8 } from 'fflate'
-import type { SoulBundle, SoulDeckPayload } from './import'
+import type { SoulBundle, SoulDeckPayload } from './import.js'
 
 export type ZipResult = { bundle?: SoulBundle; errors: string[] }
 

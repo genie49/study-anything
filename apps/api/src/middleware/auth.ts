@@ -1,7 +1,7 @@
 // 인증 미들웨어 — Bearer access 검증 + denylist 확인 → userId 주입. auth.md.
 import type { Context, Next } from 'hono'
-import { verifyAccess } from '../auth/jwt'
-import { isDenied } from '../auth/store'
+import { verifyAccess } from '../auth/jwt.js'
+import { isDenied } from '../auth/store.js'
 
 export type AuthVars = { userId: string }
 

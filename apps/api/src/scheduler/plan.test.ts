@@ -1,6 +1,6 @@
 // 일일 플랜 계산 — 불변식. learning-algorithm-detail.md §5.5·§7.
 import { describe, it, expect } from 'vitest'
-import { computeTrackPlan, type CardStateLike } from './plan'
+import { computeTrackPlan, type CardStateLike } from './plan.js'
 
 const NOW = new Date('2026-06-01T09:00:00Z')
 const EXAM = new Date('2026-06-15T00:00:00Z')

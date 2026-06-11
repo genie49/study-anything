@@ -1,8 +1,8 @@
 // 트랙 통계 — cardStates + reviewLogs 집계. 정직한 실수치만(시계열 차트는 미저장→미산출).
 // 순수 함수(computeTrackStats)는 DB 비의존 → 단위테스트 가능. learning-algorithm-detail.md §6.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
-import type { CardStateLike } from '../scheduler/plan'
+import { getDb } from '../db/mongo.js'
+import type { CardStateLike } from '../scheduler/plan.js'
 
 // 집계에 쓰는 reviewLog 최소 표면.
 export type ReviewLogLike = { ts: Date; grade: string; wasPretest?: boolean }

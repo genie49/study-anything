@@ -1,4 +1,4 @@
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 
 // Redis 용도(설계): on-demand 파생값의 집계 캐시(진도 누계 등),
 // 향후 채점 LLM 레이트리밋 / 세션 토큰 저장. (data-model §0.1 참조)

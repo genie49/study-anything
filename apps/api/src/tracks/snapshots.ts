@@ -2,10 +2,10 @@
 // 풀 상태(health·avg R(시험일)·숙달)는 로그로 복원 불가 → 플랜 읽기 시 그날치를 upsert.
 // 앱을 연 날만 기록되므로 idle 날은 공백(보간 금지). avgRExam만 새 순수 로직 → 단위테스트.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
-import { retrievability, daysBetween } from '../scheduler/memory'
-import type { CardStateLike } from '../scheduler/plan'
-import type { HealthState } from '../scheduler/health'
+import { getDb } from '../db/mongo.js'
+import { retrievability, daysBetween } from '../scheduler/memory.js'
+import type { CardStateLike } from '../scheduler/plan.js'
+import type { HealthState } from '../scheduler/health.js'
 
 export type SnapshotData = {
   health: HealthState

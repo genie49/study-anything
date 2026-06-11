@@ -1,8 +1,8 @@
 // 자기설명 피드백 로더 — 개념을 DB에서 찾아 LLM 코치(grading/explain)에 넘긴다.
 // session.ts와 같은 패턴: DB 접근은 여기서, 판정은 순수 모듈에서.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
-import { gradeSelfExplanation, type ExplainFeedback } from '../grading/explain'
+import { getDb } from '../db/mongo.js'
+import { gradeSelfExplanation, type ExplainFeedback } from '../grading/explain.js'
 
 export async function getExplanationFeedback(
   userId: string,

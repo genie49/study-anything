@@ -1,7 +1,7 @@
 // 트랙 수정(이름·시험일) + 삭제(cascade). userId는 호출자(JWT)가 주입.
 // 화면 #3(트랙 수정)·#14(시험일 설정)·위험구역 삭제. auth.md / frontend-screens.md.
 import { ObjectId } from 'mongodb'
-import { getDb } from '../db/mongo'
+import { getDb } from '../db/mongo.js'
 
 // 트랙의 자식 컬렉션 — 삭제 시 cascade 대상(전부 {userId, trackId} 스코프).
 const CHILD_COLLECTIONS = ['decks', 'concepts', 'cards', 'cardStates', 'reviewLogs', 'sessions', 'trackSnapshots'] as const

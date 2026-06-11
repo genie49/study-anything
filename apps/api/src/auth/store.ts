@@ -1,7 +1,7 @@
 // 인증 영속 — users(upsert), refreshTokens(회전·취소), access denylist(redis). auth.md.
 import { createHash } from 'node:crypto'
-import { getDb } from '../db/mongo'
-import { getRedis } from '../db/redis'
+import { getDb } from '../db/mongo.js'
+import { getRedis } from '../db/redis.js'
 
 export type GoogleProfile = { sub: string; email?: string; name?: string; picture?: string }
 

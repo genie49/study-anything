@@ -1,6 +1,6 @@
 // 세션 인터리빙 — 불변식(순열 보존·인접 분리·우선순위 보존). 매직 순서 아님.
 import { describe, it, expect } from 'vitest'
-import { interleaveSession, type Interleavable } from './session-order'
+import { interleaveSession, type Interleavable } from './session-order.js'
 
 type Item = Interleavable & { id: string }
 const mk = (id: string, conceptId: string, type = 'qa'): Item => ({ id, conceptId, type })

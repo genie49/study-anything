@@ -1,8 +1,8 @@
 // 영속 경로 통합 테스트 — 인메모리 Mongo로 구글 없이 검증.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { connectMongo, closeMongo, getDb } from '../db/mongo'
-import { upsertUser, storeRefresh, consumeRefresh } from './store'
+import { connectMongo, closeMongo, getDb } from '../db/mongo.js'
+import { upsertUser, storeRefresh, consumeRefresh } from './store.js'
 
 let mongod: MongoMemoryServer
 

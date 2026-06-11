@@ -1,8 +1,8 @@
 // /tracks/import 핵심 로직 통합 테스트 — 인메모리 Mongo, 구글 불필요.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { MongoMemoryServer } from 'mongodb-memory-server'
-import { connectMongo, closeMongo, getDb } from '../db/mongo'
-import { validateBundle, importBundle, type SoulBundle } from './import'
+import { connectMongo, closeMongo, getDb } from '../db/mongo.js'
+import { validateBundle, importBundle, type SoulBundle } from './import.js'
 
 let mongod: MongoMemoryServer
 const USER = 'user-import-1'
