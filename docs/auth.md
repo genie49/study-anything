@@ -95,6 +95,20 @@ authMiddleware(c, next):
 - **로그아웃**(설정 #11) → `/auth/logout` → 메모리 토큰 폐기 → 로그인 화면.
 - 미인증 상태로 보호 화면 접근 시 로그인으로 가드.
 
+## 구글 클라우드 콘솔 설정 (실제 연동 — 사용자 1회 수행)
+
+코드는 완성돼 있고, 실제 로그인을 켜려면 **본인의 구글 OAuth 클라이언트**가 필요하다(이 부분만 사람이 직접). [console.cloud.google.com](https://console.cloud.google.com):
+
+1. **프로젝트 생성/선택** (예: `study-anything`).
+2. **OAuth 동의 화면** → User Type `External` → 앱 이름·지원 이메일 입력 → **Scopes는 `openid` `email` `profile`만** → **Test users에 본인 구글 이메일 추가**(미검증 앱은 테스트 사용자 외 로그인 차단).
+3. **사용자 인증 정보 → OAuth 클라이언트 ID 만들기** → 유형 **웹 애플리케이션**.
+   - **승인된 리디렉션 URI**에 코드 기본값과 **정확히 일치**하게 입력: `http://localhost:8787/auth/google/callback` (끝 슬래시·포트·경로 한 글자도 다르면 `redirect_uri_mismatch`).
+4. 발급된 **클라이언트 ID/시크릿**을 `.env`에 채운다(아래 표). **시크릿은 `.env`에만, 절대 커밋 금지.**
+
+검증(라이브): `.env` 채운 뒤 `docker compose up` 또는 `pnpm api`+`pnpm web` → 프론트에서 "Google로 계속하기" → 본인 계정 로그인 → 홈 복귀 → `/auth/me`가 프로필 반환이면 연동 완료. 자동화(Playwright 등)는 구글이 봇 로그인을 차단하므로 **수동 클릭으로 1회 확인**한다.
+
+> 코드 경계까지(콜백→세션→refresh 회전→재사용 탐지)는 Google만 모킹한 E2E 테스트(`auth/flow.test.ts`)로 이미 검증됨. 위 단계는 그 경계 너머의 실제 구글 토큰 교환만 켜는 작업.
+
 ## 환경변수 (`.env`, 서버 전용)
 
 | 변수 | 용도 |
@@ -114,3 +128,4 @@ authMiddleware(c, next):
 - CSRF: refresh 쿠키 `SameSite=Lax` + `/auth/refresh`는 쿠키만으로 동작(상태변경 POST엔 별도 CSRF 토큰 또는 SameSite 의존).
 - OAuth `state`(CSRF)·`nonce`(replay) 검증, ID 토큰 `aud/iss/exp` 확인.
 - CORS는 `WEB_ORIGIN`만 허용 + `credentials: true`.
+- **인덱스 강제(부팅 시 `ensureIndexes`)**: `users.googleSub` unique(중복 사용자 race 차단), `refreshTokens.tokenHash` unique, `refreshTokens.expiresAt` TTL(만료·폐기 토큰 자동 정리).
