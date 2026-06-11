@@ -1,8 +1,7 @@
 // 백엔드 트랙 API 클라이언트. accessToken(메모리) 동봉 + 401 시 침묵 refresh 후 1회 재시도.
 // auth.md: access는 Authorization: Bearer, refresh는 httpOnly 쿠키(credentials:'include').
 import { getAccessToken, tryRefresh } from './auth'
-
-const API = import.meta.env.VITE_API_URL ?? ''
+import { API } from './apiBase'
 
 export type Track = { id: string; trackSlug: string; title: string; examDate: string | null; status: string }
 export type ImportSummary = { trackId: string; trackSlug: string; title: string; decks: number; concepts: number; cards: number; archived: number }

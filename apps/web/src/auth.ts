@@ -1,7 +1,8 @@
 // 프론트 인증 클라이언트 — accessToken은 메모리 보관(auth.md).
 // VITE_API_URL이 있으면 실제 백엔드와 통신, 없으면 데모(목업) 동작.
-const API = import.meta.env.VITE_API_URL ?? ''
-export const hasBackend = !!API
+import { API, hasBackend } from './apiBase'
+
+export { hasBackend }
 
 let accessToken: string | null = null
 export const getAccessToken = () => accessToken
