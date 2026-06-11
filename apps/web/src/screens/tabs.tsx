@@ -1,6 +1,6 @@
 // 오늘 · 통계 · 설정 + 건강 배너 매핑 — screens-tabs.jsx 이식.
 import { WF, TONE, type Tone } from '../design/tokens'
-import { Screen, StatusBar, TopBar, Body, Card, Chip, Bar, Dday, Note, Btn, Marker, TabBar } from '../design/kit'
+import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Btn, Marker, TabBar } from '../design/kit'
 import { RetentionChart, HealthTrend } from '../design/charts'
 
 type TabName = 'home' | 'today' | 'stats' | 'settings'
@@ -9,7 +9,6 @@ type TabName = 'home' | 'today' | 'stats' | 'settings'
 export function S_Today({ onStart, onNav }: { onStart?: () => void; onNav?: (t: TabName) => void }) {
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="오늘 할 일" big />
       <div style={{ padding: '0 22px 6px', fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>전체 70문항 · 38분</div>
       <Body gap={13}>
@@ -42,9 +41,6 @@ export function S_Today({ onStart, onNav }: { onStart?: () => void; onNav?: (t: 
           </div>
           <span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>완료 ✓</span>
         </Card>
-        <div style={{ marginTop: 'auto' }}>
-          <Note>시험일 다른 트랙은 한 큐에 안 섞고 트랙별 블록으로 분리 (독립성·긴급도 보존)</Note>
-        </div>
       </Body>
       <TabBar active="today" onNav={onNav} />
     </Screen>
@@ -55,7 +51,6 @@ export function S_Today({ onStart, onNav }: { onStart?: () => void; onNav?: (t: 
 export function S_Stats({ onNav }: { onNav?: (t: TabName) => void }) {
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="통계" big />
       <Body gap={16}>
         <div style={{ display: 'flex', gap: 7 }}>
@@ -79,7 +74,6 @@ export function S_Stats({ onNav }: { onNav?: (t: TabName) => void }) {
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>건강 추이 <span style={{ color: WF.ink3, fontWeight: 400, fontFamily: WF.mono, fontSize: 11 }}>health</span></div>
           <HealthTrend />
         </div>
-        <div style={{ marginTop: 'auto' }}><Note>차트 종류는 구현 단계 오픈 결정</Note></div>
       </Body>
       <TabBar active="stats" onNav={onNav} />
     </Screen>
@@ -90,7 +84,6 @@ export function S_Stats({ onNav }: { onNav?: (t: TabName) => void }) {
 export function S_Settings({ onLogout, onNav }: { onLogout?: () => void; onNav?: (t: TabName) => void }) {
   return (
     <Screen>
-      <StatusBar />
       <TopBar title="설정" big />
       <Body gap={18} style={{ paddingTop: 22 }}>
         <Card style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
@@ -101,7 +94,6 @@ export function S_Settings({ onLogout, onNav }: { onLogout?: () => void; onNav?:
           </div>
         </Card>
         <div onClick={onLogout} style={{ border: `1px solid ${TONE.danger.c}`, borderRadius: 11, padding: '13px 18px', textAlign: 'center', fontSize: 15, fontWeight: 600, color: TONE.danger.c, background: WF.paper, cursor: 'pointer' }}>로그아웃</div>
-        <Note>나머지 설정(채점 폴백·알림 등)은 추후 추가 — 우선 로그아웃만.</Note>
         <div style={{ marginTop: 'auto', textAlign: 'center', fontFamily: WF.mono, fontSize: 11, color: WF.ink3 }}>study-anything · v0.1</div>
       </Body>
       <TabBar active="settings" onNav={onNav} />

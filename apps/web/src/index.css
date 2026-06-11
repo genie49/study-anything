@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* 실제 뷰포트 채움 + 박스모델 통일 — 100dvh 높이 체인의 기반 */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: #e8e6e2; -webkit-font-smoothing: antialiased; }

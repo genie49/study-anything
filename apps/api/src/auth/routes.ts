@@ -9,12 +9,23 @@ import { upsertUser, getUser, storeRefresh, consumeRefresh, revokeFamily, denyAc
 import { requireAuth, type AuthVars } from '../middleware/auth'
 
 const REFRESH_COOKIE = 'refresh'
+const HINT_COOKIE = 'sa_session' // 읽기 가능(httpOnly 아님). 토큰 아님 — 프론트가 "세션 흔적"만 판별해 불필요한 refresh 401 방지.
 
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
   setCookie(c, REFRESH_COOKIE, token, {
     httpOnly: true, secure: config.isProd, sameSite: 'Lax',
     path: '/auth', maxAge: config.refreshTtlSec,
   })
+  // 힌트 쿠키 동반 — 프론트는 이게 있을 때만 /auth/refresh 호출.
+  setCookie(c, HINT_COOKIE, '1', {
+    httpOnly: false, secure: config.isProd, sameSite: 'Lax',
+    path: '/', maxAge: config.refreshTtlSec,
+  })
+}
+
+function clearAuthCookies(c: Parameters<typeof deleteCookie>[0]) {
+  deleteCookie(c, REFRESH_COOKIE, { path: '/auth' })
+  deleteCookie(c, HINT_COOKIE, { path: '/' })
 }
 
 // refresh 발급(저장+쿠키) + access 발급. family 유지/신규.
@@ -57,13 +68,13 @@ auth.post('/refresh', async (c) => {
     const p = await verifyRefresh(token)
     const r = await consumeRefresh(token, p.jti, p.family)
     if (r !== 'ok') {
-      deleteCookie(c, REFRESH_COOKIE, { path: '/auth' })
+      clearAuthCookies(c)
       return c.json({ error: r === 'reuse' ? 'token reuse detected' : 'invalid refresh' }, 401)
     }
     const out = await issueSession(c, p.sub, p.family) // family 유지
     return c.json(out)
   } catch {
-    deleteCookie(c, REFRESH_COOKIE, { path: '/auth' })
+    clearAuthCookies(c)
     return c.json({ error: 'invalid refresh' }, 401)
   }
 })
@@ -75,7 +86,7 @@ auth.post('/logout', requireAuth, async (c) => {
   try { const p = await verifyAccess(access); await denyAccess(p.jti, p.exp) } catch { /* noop */ }
   const rt = getCookie(c, REFRESH_COOKIE)
   if (rt) { try { const rp = await verifyRefresh(rt); await revokeFamily(rp.family) } catch { /* noop */ } }
-  deleteCookie(c, REFRESH_COOKIE, { path: '/auth' })
+  clearAuthCookies(c)
   return c.json({ ok: true })
 })
 

@@ -4,41 +4,21 @@ import { WF, TONE, type Tone } from './tokens'
 
 type Style = CSSProperties
 
-export function Screen({ children, w = 375, h = 812, bg = WF.paper, style }: {
-  children?: ReactNode; w?: number; h?: number; bg?: string; style?: Style
+// 실제 모바일 뷰포트를 채우는 유동형 화면. 폰 목업 프레임/가짜 상태바 없음.
+// 높이 체인: Stage(100dvh) → Screen(height:100%, flex-col) → Body(flex:1, 스크롤).
+// 실기기의 노치/상태바는 safe-area-inset-top으로 회피(데스크톱은 0이라 상수 10px 더함).
+export function Screen({ children, bg = WF.paper, style }: {
+  children?: ReactNode; bg?: string; style?: Style
 }) {
   return (
     <div style={{
-      width: w, height: h, background: bg, position: 'relative',
-      border: `1px solid ${WF.line}`, borderRadius: 18, overflow: 'hidden',
-      display: 'flex', flexDirection: 'column', fontFamily: WF.sans,
-      color: WF.ink, ...style,
+      width: '100%', height: '100%', background: bg, position: 'relative',
+      overflow: 'hidden', display: 'flex', flexDirection: 'column',
+      fontFamily: WF.sans, color: WF.ink,
+      paddingTop: 'calc(env(safe-area-inset-top) + 10px)',
+      ...style,
     }}>
       {children}
-    </div>
-  )
-}
-
-export function StatusBar({ dark = false }: { dark?: boolean }) {
-  const c = dark ? '#fff' : WF.ink
-  return (
-    <div style={{
-      height: 30, flex: '0 0 30px', display: 'flex', alignItems: 'center',
-      justifyContent: 'space-between', padding: '0 20px',
-      fontFamily: WF.sans, fontSize: 13, fontWeight: 600, color: c,
-    }}>
-      <span>9:41</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <svg width="17" height="11" viewBox="0 0 17 11"><g fill={c}>
-          <rect x="0" y="7" width="3" height="4" rx="1" /><rect x="4.5" y="5" width="3" height="6" rx="1" />
-          <rect x="9" y="2.5" width="3" height="8.5" rx="1" /><rect x="13.5" y="0" width="3" height="11" rx="1" />
-        </g></svg>
-        <svg width="25" height="12" viewBox="0 0 25 12">
-          <rect x="0.5" y="0.5" width="21" height="11" rx="3" fill="none" stroke={c} opacity="0.45" />
-          <rect x="2" y="2" width="15" height="8" rx="1.5" fill={c} />
-          <rect x="23" y="4" width="1.5" height="4" rx="0.75" fill={c} opacity="0.5" />
-        </svg>
-      </div>
     </div>
   )
 }
@@ -58,7 +38,8 @@ export function TabBar({ active = 'home', onNav }: { active?: TabName; onNav?: (
   return (
     <div style={{
       flex: '0 0 auto', borderTop: `1px solid ${WF.lineSoft}`, background: WF.paper,
-      display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', padding: '8px 0 18px',
+      display: 'grid', gridTemplateColumns: 'repeat(4,1fr)',
+      padding: '8px 0 calc(env(safe-area-inset-bottom) + 14px)',
     }}>
       {tabs.map(([n, label]) => (
         <div key={n} onClick={() => onNav?.(n)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: onNav ? 'pointer' : 'default' }}>
@@ -231,8 +212,9 @@ export function Card({ children, style, strong = false }: { children?: ReactNode
 }
 
 export function Body({ children, pad = 18, gap = 14, style }: { children?: ReactNode; pad?: number; gap?: number; style?: Style }) {
+  // flex:1 + minHeight:0 + overflowY:auto → 내용이 뷰포트보다 길면 스크롤(잘림 방지).
   return (
-    <div style={{ flex: 1, padding: pad, display: 'flex', flexDirection: 'column', gap, overflow: 'hidden', ...style }}>
+    <div style={{ flex: 1, minHeight: 0, padding: pad, display: 'flex', flexDirection: 'column', gap, overflowY: 'auto', ...style }}>
       {children}
     </div>
   )

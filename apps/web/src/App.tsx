@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { WF } from './design/tokens'
-import { hasBackend, login, tryRefresh, logout } from './auth'
+import { hasBackend, hasSessionHint, login, tryRefresh, logout } from './auth'
 import { S_Login, S_TrackList, S_Dashboard, S_Edit } from './screens/home'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
 import { S_Today, S_Stats, S_Settings } from './screens/tabs'
@@ -12,11 +12,13 @@ type Screen =
 
 type Tab = 'home' | 'today' | 'stats' | 'settings'
 
-// 모바일 화면(375×812)을 중앙에 띄우는 캔버스.
+// 모바일 풀블리드, 데스크톱은 중앙 정렬된 모바일 폭(≤480) 컬럼. 폰 목업 프레임 없음.
 function Stage({ children }: { children: ReactNode }) {
   return (
-    <div style={{ minHeight: '100dvh', background: '#f3f1ee', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: 24, fontFamily: WF.sans }}>
-      <div style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.10)', borderRadius: 18 }}>{children}</div>
+    <div style={{ minHeight: '100dvh', background: '#e8e6e2', display: 'flex', justifyContent: 'center', fontFamily: WF.sans }}>
+      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: WF.paper, overflow: 'hidden', boxShadow: '0 0 0 1px rgba(0,0,0,0.05)' }}>
+        {children}
+      </div>
     </div>
   )
 }
@@ -25,9 +27,9 @@ export default function App() {
   const [authed, setAuthed] = useState(false)
   const [screen, setScreen] = useState<Screen>('home')
 
-  // 백엔드가 있으면 앱 로드 시 refresh 쿠키로 침묵 로그인 시도.
+  // 로그인 흔적(힌트 쿠키)이 있을 때만 침묵 로그인 시도 — 최초 방문자에겐 401 안 띄움.
   useEffect(() => {
-    if (hasBackend) { void tryRefresh().then(setAuthed) }
+    if (hasBackend && hasSessionHint()) { void tryRefresh().then(setAuthed) }
   }, [])
 
   if (!authed) {
