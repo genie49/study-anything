@@ -182,6 +182,7 @@ export function S_Dashboard({ track, defaultInfo = false, onStart, onEdit, onBac
 function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onStart?: () => void; onEdit?: () => void; onBack?: () => void }) {
   const [plan, setPlan] = useState<TrackPlan | null>(null)
   const [info, setInfo] = useState(false)
+  // 세션 완료 후 대시보드 복귀 시 화면 전환으로 이 컴포넌트가 remount → getPlan 재호출 → 갱신된 숫자 반영.
   useEffect(() => { setPlan(null); void getPlan(track.id).then(setPlan).catch(() => setPlan(null)) }, [track.id])
 
   const hasExam = !!track.examDate
