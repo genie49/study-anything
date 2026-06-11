@@ -161,13 +161,16 @@ export function Divider({ children }: { children?: ReactNode }) {
   )
 }
 
-export function Btn({ children, primary = false, ghost = false, full = true, sm = false, onClick }: {
-  children?: ReactNode; primary?: boolean; ghost?: boolean; full?: boolean; sm?: boolean; onClick?: () => void
+export function Btn({ children, primary = false, ghost = false, full = true, sm = false, disabled = false, onClick }: {
+  children?: ReactNode; primary?: boolean; ghost?: boolean; full?: boolean; sm?: boolean; disabled?: boolean; onClick?: () => void
 }) {
   const base: Style = {
     fontFamily: WF.sans, fontSize: sm ? 13 : 15, fontWeight: 600,
     padding: sm ? '8px 14px' : '13px 18px', borderRadius: 10, textAlign: 'center',
-    width: full ? '100%' : 'auto', boxSizing: 'border-box', whiteSpace: 'nowrap', cursor: 'pointer',
+    width: full ? '100%' : 'auto', boxSizing: 'border-box', whiteSpace: 'nowrap',
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.48 : 1,
+    pointerEvents: disabled ? 'none' : 'auto',
   }
   if (primary) return <div onClick={onClick} style={{ ...base, background: WF.inkSolid, color: '#fff' }}>{children}</div>
   if (ghost) return <div onClick={onClick} style={{ ...base, background: 'transparent', color: WF.ink, border: `1px solid ${WF.line}` }}>{children}</div>

@@ -107,10 +107,11 @@ export function S_Concept({ item, done = 0, total = 42, stage = 'input', onClose
 }
 
 // 5. 다지기 (입력형)
-export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
-  item?: SessionItem; done?: number; total?: number; onClose?: () => void; onSubmit?: (answer: string) => void
+export function S_Quiz({ item, done = 24, total = 42, submitting = false, error, onClose, onSubmit }: {
+  item?: SessionItem; done?: number; total?: number; submitting?: boolean; error?: string | null; onClose?: () => void; onSubmit?: (answer: string) => void
 }) {
   const [answer, setAnswer] = useState(item ? '' : 'has lived')
+  const canSubmit = answer.trim().length > 0 && !submitting
   return (
     <Screen>
       <SessHead done={done} total={total} onClose={onClose} />
@@ -122,6 +123,7 @@ export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
         <textarea
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
+          disabled={submitting}
           placeholder="답 입력…"
           style={{
             marginTop: 30, width: '100%', minHeight: 54, border: `1px solid ${WF.lineStrong}`, borderRadius: 12,
@@ -129,7 +131,8 @@ export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
             fontFamily: WF.sans, resize: 'none', outline: 'none', boxSizing: 'border-box',
           }}
         />
-        <div style={{ marginTop: 14 }}><Btn primary onClick={() => onSubmit?.(answer)}>제출</Btn></div>
+        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: TONE.danger.c, lineHeight: 1.45 }}>{error}</div>}
+        <div style={{ marginTop: 14 }}><Btn primary disabled={!canSubmit} onClick={() => onSubmit?.(answer)}>{submitting ? '채점 중…' : '제출'}</Btn></div>
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
           <span style={{ fontSize: 14 }}>💡</span><span>{item?.hint ?? '힌트 보기'}</span>
         </div>
