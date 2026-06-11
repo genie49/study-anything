@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
-import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
+import { hasBackend, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
 import { getTracks, getPlan, getSession, importZip, patchTrack, deleteTrack, submitAnswer, gradeExplanation, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
 import { summarizeToday, type TodayRow, type TodaySummary } from './today'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
@@ -57,9 +57,10 @@ export default function App() {
     try { setTracks(await getTracks()) } catch { setTracks([]) }
   }, [])
 
-  // 로그인 흔적이 있을 때만 침묵 로그인 시도 — 최초 방문자에겐 401 안 띄움.
+  // API와 Web이 다른 호스트인 배포 환경에서는 Web이 API 쿠키를 읽을 수 없다.
+  // 그래서 힌트 쿠키 확인 대신 refresh를 직접 시도한다.
   useEffect(() => {
-    if (hasBackend && hasSessionHint()) { void tryRefresh().then(setAuthed) }
+    if (hasBackend) { void tryRefresh().then((ok) => { if (ok) setAuthed(true) }) }
   }, [])
 
   // 인증되면 트랙 목록 로드.

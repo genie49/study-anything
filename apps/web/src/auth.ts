@@ -6,12 +6,6 @@ export const hasBackend = !!API
 let accessToken: string | null = null
 export const getAccessToken = () => accessToken
 
-// 백엔드가 세션 발급 시 함께 심는 읽기 가능한 힌트 쿠키(토큰 아님).
-// 로그인 흔적이 있을 때만 /auth/refresh를 호출 → 로그인 전 사용자에게 불필요한 401 방지.
-export function hasSessionHint(): boolean {
-  return typeof document !== 'undefined' && document.cookie.split('; ').some((c) => c === 'sa_session=1')
-}
-
 // 로그인 시작 → 백엔드 구글 OAuth로 리다이렉트
 export function login() {
   window.location.href = `${API}/auth/google`
