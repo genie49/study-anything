@@ -22,7 +22,7 @@ export type TrackStats = {
   byGrade: GradeDist; last7: DayCount[]
 }
 export type SessionItem = {
-  stateId: string; cardId: string; mode: 'new' | 'review'; type: string
+  stateId: string; cardId: string; conceptId: string; mode: 'new' | 'review'; type: string
   prompt: string; answer: string; explanation: string; hint: string | null; distractors: string[]
   conceptTitle: string; conceptBodyMd: string
 }
@@ -80,10 +80,23 @@ export async function getStats(id: string): Promise<TrackStats> {
 }
 
 // GET /tracks/:id/session — 오늘 학습할 실제 카드/개념 큐.
-export async function getSession(id: string): Promise<SessionQueue> {
-  const res = await authedFetch(`/tracks/${id}/session`)
+// extra=true → 추가 학습(할당량 소진/실현 어려움이어도 다음 가치 있는 카드를 받아온다).
+export async function getSession(id: string, opts: { extra?: boolean } = {}): Promise<SessionQueue> {
+  const res = await authedFetch(`/tracks/${id}/session${opts.extra ? '?extra=1' : ''}`)
   if (!res.ok) throw new Error(`세션 생성 실패 (${await errorMessage(res)})`)
   return (await res.json() as { session: SessionQueue }).session
+}
+
+// POST /tracks/:id/concept/:conceptId/explain — 자기설명("왜?") LLM 피드백. 게이트 아님(언제든 진행 가능).
+export type ExplainFeedback = { sufficient: boolean; feedback: string; mode?: string }
+export async function gradeExplanation(trackId: string, conceptId: string, explanation: string): Promise<ExplainFeedback> {
+  const res = await authedFetch(`/tracks/${trackId}/concept/${conceptId}/explain`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ explanation }),
+  })
+  if (!res.ok) throw new Error(`자기설명 피드백 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { feedback: ExplainFeedback }).feedback
 }
 
 // POST /tracks/:id/session/answer — 답안 제출 + 상태 갱신.

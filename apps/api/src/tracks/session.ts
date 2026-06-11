@@ -10,6 +10,7 @@ import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '
 export type SessionItem = {
   stateId: string
   cardId: string
+  conceptId: string
   mode: 'new' | 'review'
   type: string
   prompt: string
@@ -50,8 +51,17 @@ function toPlanState(s: StateDoc) {
   }
 }
 
-export async function getSessionQueue(userId: string, trackId: string, now = new Date()): Promise<SessionQueue | null> {
+// extra=true → "추가 학습": 일일 캡·suspendNew를 무시하고 가용 카드를 우선순위로 채운다.
+// 학습은 언제나 가능해야 한다 — 오늘 할당량 소진/실현 어려움(신규 중단)으로 todayTotal=0이어도
+// 사용자가 더 하고 싶으면 다음으로 가치 있는 카드를 내준다. 미도래 복습을 당겨 풀어도 채점기가
+// elapsedDays를 작게 반영해 자연스럽게 흡수하므로 별도 '연습 전용' 모드는 두지 않는다.
+export async function getSessionQueue(
+  userId: string,
+  trackId: string,
+  opts: { now?: Date; extra?: boolean } = {},
+): Promise<SessionQueue | null> {
   if (!ObjectId.isValid(trackId)) return null
+  const now = opts.now ?? new Date()
   const db = getDb()
   const _id = new ObjectId(trackId)
   const track = await db.collection('tracks').findOne({ _id, userId, status: { $ne: 'deleted' } })
@@ -61,15 +71,24 @@ export async function getSessionQueue(userId: string, trackId: string, now = new
     .find({ userId, trackId: _id, archived: { $ne: true }, triaged: { $ne: true } })
     .sort({ dueAt: 1 })
     .toArray()
+  const capacityPerDay = (track.dailyCapacity as number | undefined) ?? 40
   const plan = computeTrackPlan(states.map(toPlanState), {
     now,
     examDate: (track.examDate as Date | null) ?? null,
-    capacityPerDay: (track.dailyCapacity as number | undefined) ?? undefined,
+    capacityPerDay,
   })
 
-  const dueReview = states.filter((s) => !isNewState(s) && (s.dueAt?.getTime() ?? 0) <= now.getTime()).slice(0, plan.todayReview)
-  const fresh = states.filter(isNewState).slice(0, plan.todayNew)
-  const picked = [...dueReview, ...fresh]
+  let picked: StateDoc[]
+  if (opts.extra) {
+    // dueAt 오름차순(연체→곧 도래→미도래) 복습 먼저, 그다음 신규. 한 세션 = capacityPerDay 배치.
+    const reviewAll = states.filter((s) => !isNewState(s))
+    const newAll = states.filter(isNewState)
+    picked = [...reviewAll, ...newAll].slice(0, capacityPerDay)
+  } else {
+    const dueReview = states.filter((s) => !isNewState(s) && (s.dueAt?.getTime() ?? 0) <= now.getTime()).slice(0, plan.todayReview)
+    const fresh = states.filter(isNewState).slice(0, plan.todayNew)
+    picked = [...dueReview, ...fresh]
+  }
   if (!picked.length) return { trackId, total: 0, items: [] }
 
   const cardIds = picked.map((s) => s.cardId)
@@ -87,6 +106,7 @@ export async function getSessionQueue(userId: string, trackId: string, now = new
     const item: SessionItem = {
       stateId: String(s._id),
       cardId: String(card._id),
+      conceptId: String(card.conceptId ?? ''),
       mode: isNewState(s) ? 'new' : 'review',
       type: (card.type as string) ?? 'qa',
       prompt: (card.prompt as string) ?? '',

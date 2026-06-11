@@ -93,6 +93,48 @@ describe('GET /tracks/:id/session', () => {
     expect(session.items[0].conceptTitle).toBe('T')
     expect(session.items[0].conceptBodyMd).toBe('#')
   })
+
+  it('실현 어려움(신규 중단)이면 일반 세션은 0이지만 extra=1은 학습 카드를 내준다', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '추가학습트랙'; b.manifest.title = '추가학습트랙'
+    b.examDate = '2020-01-01' // 과거 시험일 → 실현 불가 → suspendNew → 일반 todayTotal=0
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    const normal = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const n = await normal.json() as { session: { total: number } }
+    expect(n.session.total).toBe(0) // 신규 중단 + 복습 없음 → 학습할 게 없음
+
+    const extra = await app.request(`/tracks/${trackId}/session?extra=1`, { headers: auth })
+    expect(extra.status).toBe(200)
+    const e = await extra.json() as { session: { total: number; items: { mode: string }[] } }
+    expect(e.session.total).toBeGreaterThan(0) // 캡·suspendNew 무시하고 카드 제공
+    expect(e.session.items[0].mode).toBe('new')
+  })
+})
+
+describe('POST /tracks/:id/concept/:conceptId/explain — 자기설명 피드백', () => {
+  it('빈 설명 400 · 없는 개념 404 · 유효하면 피드백 반환', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '자기설명트랙'; b.manifest.title = '자기설명트랙'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER), 'content-type': 'application/json' }
+    const concept = await getDb().collection('concepts').findOne({ userId: USER, trackId: new ObjectId(trackId), conceptKey: 'pp' })
+    const cid = String(concept!._id)
+
+    const empty = await app.request(`/tracks/${trackId}/concept/${cid}/explain`, { method: 'POST', headers: auth, body: JSON.stringify({ explanation: '  ' }) })
+    expect(empty.status).toBe(400)
+
+    const missing = await app.request(`/tracks/${trackId}/concept/64b64c1f01bcbad5f9f99999/explain`, { method: 'POST', headers: auth, body: JSON.stringify({ explanation: '설명' }) })
+    expect(missing.status).toBe(404)
+
+    const ok = await app.request(`/tracks/${trackId}/concept/${cid}/explain`, { method: 'POST', headers: auth, body: JSON.stringify({ explanation: '과거 일이 지금까지 이어진다' }) })
+    expect(ok.status).toBe(200)
+    const j = await ok.json() as { feedback: { sufficient: boolean; feedback: string; mode: string } }
+    expect(typeof j.feedback.feedback).toBe('string')
+    expect(j.feedback.feedback.length).toBeGreaterThan(0)
+    expect(j.feedback.mode).toBe('skipped') // 테스트 환경엔 LLM 키 없음 → 폴백(통과 처리)
+  })
 })
 
 describe('GET /tracks/:id/snapshots (플랜 조회 시 일별 기록)', () => {

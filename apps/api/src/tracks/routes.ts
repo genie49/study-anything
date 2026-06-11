@@ -9,6 +9,7 @@ import { getTrackPlan } from './plan'
 import { getTrackStats } from './stats'
 import { getTrackSnapshots } from './snapshots'
 import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session'
+import { getExplanationFeedback } from './explain'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
 
@@ -41,7 +42,8 @@ tracks.get('/:id/snapshots', requireAuth, async (c) => {
 
 // 오늘 학습 세션 큐 — 실제 카드/개념 콘텐츠를 반환. 상태 갱신은 제출 API에서 처리한다.
 tracks.get('/:id/session', requireAuth, async (c) => {
-  const queue = await getSessionQueue(c.get('userId'), c.req.param('id') ?? '')
+  const extra = c.req.query('extra') === '1' // 추가 학습(할당량 초과/실현 어려움에도 학습 가능)
+  const queue = await getSessionQueue(c.get('userId'), c.req.param('id') ?? '', { extra })
   if (!queue) return c.json({ error: 'track not found' }, 404)
   return c.json({ ok: true, session: queue })
 })
@@ -62,6 +64,21 @@ tracks.post('/:id/session/answer', requireAuth, async (c) => {
   })
   if (!result) return c.json({ error: 'card not found' }, 404)
   return c.json({ ok: true, result })
+})
+
+// 개념 자기설명("왜?") 피드백 — LLM 코치가 핵심을 담았는지 판정 + 한국어 피드백. 게이트 아님.
+tracks.post('/:id/concept/:conceptId/explain', requireAuth, async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }
+  const explanation = (body as { explanation?: unknown }).explanation
+  if (typeof explanation !== 'string' || !explanation.trim()) {
+    return c.json({ error: 'invalid explanation', errors: ['explanation required'] }, 400)
+  }
+  const feedback = await getExplanationFeedback(
+    c.get('userId'), c.req.param('id') ?? '', c.req.param('conceptId') ?? '', explanation.trim(),
+  )
+  if (!feedback) return c.json({ error: 'concept not found' }, 404)
+  return c.json({ ok: true, feedback })
 })
 
 // 업로드된 zip(멀티파트 'file' 또는 raw 바디)을 풀어 bundle로. 실패 시 에러 문자열 배열.
