@@ -6,7 +6,7 @@ import { validateBundle, importBundle, type SoulBundle } from './import'
 import { bundleFromZip } from './unzip'
 import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
 import { getTrackPlan } from './plan'
-import { getSessionQueue } from './session'
+import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
 
@@ -28,6 +28,24 @@ tracks.get('/:id/session', requireAuth, async (c) => {
   const queue = await getSessionQueue(c.get('userId'), c.req.param('id') ?? '')
   if (!queue) return c.json({ error: 'track not found' }, 404)
   return c.json({ ok: true, session: queue })
+})
+
+// 세션 답안 제출 — 현재는 exact/mcq 결정적 채점으로 상태 갱신. LLM 채점은 다음 증분.
+tracks.post('/:id/session/answer', requireAuth, async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }
+  const b = body as Partial<AnswerInput>
+  if (!b.stateId || !b.cardId || typeof b.answer !== 'string') {
+    return c.json({ error: 'invalid answer', errors: ['stateId, cardId, answer required'] }, 400)
+  }
+  const result = await submitSessionAnswer(c.get('userId'), c.req.param('id') ?? '', {
+    stateId: b.stateId,
+    cardId: b.cardId,
+    answer: b.answer,
+    elapsedMs: typeof b.elapsedMs === 'number' ? b.elapsedMs : undefined,
+  })
+  if (!result) return c.json({ error: 'card not found' }, 404)
+  return c.json({ ok: true, result })
 })
 
 // 업로드된 zip(멀티파트 'file' 또는 raw 바디)을 풀어 bundle로. 실패 시 에러 문자열 배열.

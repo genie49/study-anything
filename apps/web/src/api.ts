@@ -19,6 +19,10 @@ export type SessionItem = {
   conceptTitle: string; conceptBodyMd: string
 }
 export type SessionQueue = { trackId: string; total: number; items: SessionItem[] }
+export type AnswerResult = {
+  cardId: string; score: number; grade: 'again' | 'hard' | 'good' | 'easy'; correct: boolean
+  reason: string; answer: string; explanation: string; dueAt: string; stage: string
+}
 
 async function authedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers)
@@ -57,6 +61,17 @@ export async function getSession(id: string): Promise<SessionQueue> {
   const res = await authedFetch(`/tracks/${id}/session`)
   if (!res.ok) throw new Error(`세션 생성 실패 (${await errorMessage(res)})`)
   return (await res.json() as { session: SessionQueue }).session
+}
+
+// POST /tracks/:id/session/answer — 답안 제출 + 상태 갱신.
+export async function submitAnswer(trackId: string, input: { stateId: string; cardId: string; answer: string; elapsedMs?: number }): Promise<AnswerResult> {
+  const res = await authedFetch(`/tracks/${trackId}/session/answer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw new Error(`답안 제출 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { result: AnswerResult }).result
 }
 
 // POST /tracks/import — .soul.zip 멀티파트 업로드(브라우저가 boundary 설정 → content-type 수동 지정 금지).
