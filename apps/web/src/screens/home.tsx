@@ -4,6 +4,18 @@ import { WF, TONE } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Divider, Btn, Field, Marker, InfoDot, HealthSheet, TabBar } from '../design/kit'
 import { AppMark } from '../design/charts'
 
+// 구글 공식 4색 "G" 로고 (브랜딩 가이드라인)
+function GoogleG({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" style={{ display: 'block', flex: '0 0 auto' }} aria-hidden>
+      <path fill="#4285F4" d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.583-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" />
+    </svg>
+  )
+}
+
 // 0. 로그인 (구글 단독)
 export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
   return (
@@ -15,18 +27,16 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
           내용과 시험일만 넣으면<br />매일의 학습이 자동으로.
         </div>
         <div style={{ marginTop: 'auto', width: '100%' }}>
-          <div onClick={onGoogle} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
-            border: `1px solid ${WF.line}`, borderRadius: 12, padding: '14px 18px',
-            background: WF.paper, fontSize: 15, fontWeight: 600, cursor: 'pointer',
+          {/* 구글 공식 Sign-in 버튼 — 흰 배경 · #747775 테두리 · 4색 G · #1f1f1f 텍스트 */}
+          <button onClick={onGoogle} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+            width: '100%', height: 48, border: '1px solid #747775', borderRadius: 12,
+            background: '#fff', color: '#1f1f1f', fontFamily: WF.sans,
+            fontSize: 15, fontWeight: 600, letterSpacing: '0.1px', cursor: 'pointer',
           }}>
-            <span style={{
-              width: 20, height: 20, borderRadius: 4, border: `1px solid ${WF.line}`,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: WF.mono, fontSize: 13, fontWeight: 700, color: WF.ink2,
-            }}>G</span>
-            Google로 계속하기
-          </div>
+            <GoogleG />
+            Google 계정으로 계속하기
+          </button>
         </div>
       </Body>
     </Screen>

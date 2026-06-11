@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { WF } from './design/tokens'
-import { hasBackend, login, tryRefresh, logout } from './auth'
+import { hasBackend, hasSessionHint, login, tryRefresh, logout } from './auth'
 import { S_Login, S_TrackList, S_Dashboard, S_Edit } from './screens/home'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
 import { S_Today, S_Stats, S_Settings } from './screens/tabs'
@@ -27,9 +27,9 @@ export default function App() {
   const [authed, setAuthed] = useState(false)
   const [screen, setScreen] = useState<Screen>('home')
 
-  // 백엔드가 있으면 앱 로드 시 refresh 쿠키로 침묵 로그인 시도.
+  // 로그인 흔적(힌트 쿠키)이 있을 때만 침묵 로그인 시도 — 최초 방문자에겐 401 안 띄움.
   useEffect(() => {
-    if (hasBackend) { void tryRefresh().then(setAuthed) }
+    if (hasBackend && hasSessionHint()) { void tryRefresh().then(setAuthed) }
   }, [])
 
   if (!authed) {
