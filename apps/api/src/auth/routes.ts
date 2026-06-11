@@ -10,15 +10,16 @@ import { requireAuth, type AuthVars } from '../middleware/auth.js'
 
 const REFRESH_COOKIE = 'refresh'
 const HINT_COOKIE = 'sa_session' // 읽기 가능(httpOnly 아님). 토큰 아님 — 프론트가 "세션 흔적"만 판별해 불필요한 refresh 401 방지.
+const cookieSameSite = config.isProd ? 'None' : 'Lax'
 
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string) {
   setCookie(c, REFRESH_COOKIE, token, {
-    httpOnly: true, secure: config.isProd, sameSite: 'Lax',
+    httpOnly: true, secure: config.isProd, sameSite: cookieSameSite,
     path: '/auth', maxAge: config.refreshTtlSec,
   })
   // 힌트 쿠키 동반 — 프론트는 이게 있을 때만 /auth/refresh 호출.
   setCookie(c, HINT_COOKIE, '1', {
-    httpOnly: false, secure: config.isProd, sameSite: 'Lax',
+    httpOnly: false, secure: config.isProd, sameSite: cookieSameSite,
     path: '/', maxAge: config.refreshTtlSec,
   })
 }
