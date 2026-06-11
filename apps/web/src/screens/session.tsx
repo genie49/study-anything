@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, Body, Card, Chip, Bar, Btn, Marker } from '../design/kit'
-import type { AnswerResult, SessionItem } from '../api'
+import type { AnswerResult, ExplainFeedback, SessionItem } from '../api'
 
 function SessHead({ done, total, right, onClose }: { done: number; total: number; right?: string; onClose?: () => void }) {
   return (
@@ -40,14 +40,27 @@ function plainMd(s: string): string {
   return s.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim()
 }
 
-export function S_Concept({ item, done = 0, total = 42, stage = 'input', onClose, onNext }: {
-  item?: SessionItem; done?: number; total?: number; stage?: 'input' | 'insufficient' | 'ok'; onClose?: () => void; onNext?: () => void
+export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExplain }: {
+  item?: SessionItem; done?: number; total?: number; onClose?: () => void; onNext?: () => void
+  // 백엔드 모드에서만 제공 — 실제 LLM 자기설명 피드백. 미제공이면(데모) 목업 렌더.
+  onExplain?: (explanation: string) => Promise<ExplainFeedback>
 }) {
-  const ok = stage === 'ok'
-  const low = stage === 'insufficient'
-  const filled = ok || low
+  const [text, setText] = useState('')
+  const [fb, setFb] = useState<ExplainFeedback | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const demo = !onExplain
   const conceptTitle = item?.conceptTitle ?? '현재완료 vs 과거시제'
   const conceptBody = item ? plainMd(item.conceptBodyMd) : '현재완료는 과거의 사건이 지금에 영향을 줄 때. 과거시제는 현재와 단절된 한 시점.'
+
+  const requestFeedback = async () => {
+    if (!onExplain || !text.trim() || loading) return
+    setLoading(true); setErr(null)
+    try { setFb(await onExplain(text.trim())) }
+    catch (e) { setErr((e as Error).message) }
+    finally { setLoading(false) }
+  }
+
   return (
     <Screen>
       <SessHead done={done} total={total} onClose={onClose} />
@@ -57,49 +70,56 @@ export function S_Concept({ item, done = 0, total = 42, stage = 'input', onClose
         <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.65, color: WF.ink }}>
           <b>핵심.</b> {conceptBody}
         </div>
-        <Card style={{ marginTop: 18, background: WF.fill1 }}>
-          <div style={{ fontFamily: WF.mono, fontSize: 10.5, color: WF.ink3, marginBottom: 9, letterSpacing: '0.4px' }}>혼동쌍 · confusableWith</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, borderRight: `1px solid ${WF.line}`, paddingRight: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>have p.p.</div>
-              <div style={{ fontSize: 12, color: WF.ink2, marginTop: 3 }}>지금까지의 영향</div>
-            </div>
-            <div style={{ flex: 1, paddingLeft: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>과거형</div>
-              <div style={{ fontSize: 12, color: WF.ink2, marginTop: 3 }}>끝난 한 시점</div>
-            </div>
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>
+            개념을 자신의 언어로 설명해 보아요 <span style={{ color: WF.ink3, fontWeight: 400 }}>· 왜 그런가요?</span>
           </div>
-        </Card>
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>개념을 자신의 언어로 설명해 보아요</div>
-          <div style={{ border: `1px solid ${filled ? WF.lineStrong : WF.line}`, borderRadius: 12, padding: '13px 14px', color: filled ? WF.ink : WF.ink3, fontSize: 13.5, lineHeight: 1.55, minHeight: 56 }}>
-            {filled ? '현재완료는 과거 일이 지금까지 이어지는 거고, 과거형은 그냥 끝난 일이에요.' : '직접 설명해보세요…'}
-          </div>
-          {!filled && <div style={{ marginTop: 10 }}><Btn ghost sm full>피드백 받기</Btn></div>}
-          {low && (
-            <div style={{ marginTop: 10, border: `1px solid ${TONE.warn.c}`, background: TONE.warn.bg, borderRadius: 12, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-                <Marker tone="warn" /><span style={{ fontSize: 13.5, fontWeight: 700 }}>조금 더 필요해요</span>
+          {demo ? (
+            // 데모 전용 목업(백엔드 없을 때). 실제 학습 경로는 아래 인터랙티브 분기로 동작한다.
+            <>
+              <div style={{ border: `1px solid ${WF.lineStrong}`, borderRadius: 12, padding: '13px 14px', color: WF.ink, fontSize: 13.5, lineHeight: 1.55, minHeight: 56 }}>
+                현재완료는 과거 일이 지금까지 이어지는 거고, 과거형은 그냥 끝난 일이에요.
               </div>
-              <div style={{ fontSize: 12.5, color: WF.ink2, lineHeight: 1.5 }}>'이어진다'는 맞아요. 과거형이 <b>현재와 단절</b>된다는 점을 한 줄 더 보태볼까요?</div>
-              <div style={{ marginTop: 10 }}><Btn ghost sm full>다시 피드백 받기</Btn></div>
-            </div>
-          )}
-          {ok && (
-            <div style={{ marginTop: 10, border: `1px solid ${TONE.ok.c}`, background: TONE.ok.bg, borderRadius: 12, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Marker tone="ok" /><span style={{ fontSize: 13.5, fontWeight: 700 }}>좋아요! 핵심을 짚었어요</span>
+              <div style={{ marginTop: 10, border: `1px solid ${TONE.ok.c}`, background: TONE.ok.bg, borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Marker tone="ok" /><span style={{ fontSize: 13.5, fontWeight: 700 }}>좋아요! 핵심을 짚었어요</span>
+                </div>
               </div>
-              <div style={{ fontSize: 12.5, color: WF.ink2, lineHeight: 1.5, marginTop: 4 }}>이제 다지기로 넘어갈 수 있어요.</div>
-            </div>
+            </>
+          ) : (
+            <>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                disabled={loading}
+                placeholder="직접 설명해보세요…"
+                style={{
+                  width: '100%', minHeight: 56, border: `1px solid ${WF.lineStrong}`, borderRadius: 12,
+                  padding: '13px 14px', fontSize: 13.5, lineHeight: 1.55, color: WF.ink, background: WF.paper,
+                  fontFamily: WF.sans, resize: 'none', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <Btn ghost sm full disabled={!text.trim() || loading} onClick={() => { void requestFeedback() }}>
+                  {loading ? '피드백 받는 중…' : fb ? '다시 피드백 받기' : '피드백 받기'}
+                </Btn>
+              </div>
+              {err && <div style={{ marginTop: 8, fontSize: 12.5, color: TONE.danger.c, lineHeight: 1.45 }}>{err}</div>}
+              {fb && (
+                <div style={{ marginTop: 10, border: `1px solid ${fb.sufficient ? TONE.ok.c : TONE.warn.c}`, background: fb.sufficient ? TONE.ok.bg : TONE.warn.bg, borderRadius: 12, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                    <Marker tone={fb.sufficient ? 'ok' : 'warn'} />
+                    <span style={{ fontSize: 13.5, fontWeight: 700 }}>{fb.sufficient ? '좋아요! 핵심을 짚었어요' : '조금 더 보태볼까요?'}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: WF.ink2, lineHeight: 1.5 }}>{fb.feedback}</div>
+                </div>
+              )}
+            </>
           )}
         </div>
+        {/* 자기설명은 권장 단계일 뿐 게이트가 아니다 — 학습은 언제나 진행 가능. */}
         <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-          <div>
-            {ok
-              ? <Btn primary onClick={onNext}>다지기 시작 ›</Btn>
-              : <div style={{ textAlign: 'center', padding: '13px 18px', borderRadius: 10, background: WF.fill1, color: WF.ink3, fontSize: 15, fontWeight: 600, border: `1px solid ${WF.lineSoft}` }}>다지기 시작 ›</div>}
-          </div>
+          <Btn primary onClick={onNext}>다지기 시작 ›</Btn>
         </div>
       </Body>
     </Screen>

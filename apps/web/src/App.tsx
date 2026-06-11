@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
 import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
-import { getTracks, getPlan, getSession, importZip, patchTrack, deleteTrack, submitAnswer, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
+import { getTracks, getPlan, getSession, importZip, patchTrack, deleteTrack, submitAnswer, gradeExplanation, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
 import { summarizeToday, type TodayRow, type TodaySummary } from './today'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
@@ -95,11 +95,11 @@ export default function App() {
   const nav = (t: Tab) => setScreen(t)
   const doLogout = () => { void logout().then(() => { setAuthed(false); setTracks(null); setSelected(null) }) }
   const openTrack = (t?: Track) => { setSelected(t ?? null); setScreen('dashboard') }
-  const startSession = async (track?: Track) => {
+  const startSession = async (track?: Track, extra = false) => {
     const t = track ?? selected // 오늘 탭에서 넘어온 트랙 우선(미지정이면 현재 선택).
     if (hasBackend && t) {
       setSelected(t) // 세션 후 대시보드 복귀가 올바른 트랙을 가리키도록.
-      const q = await getSession(t.id)
+      const q = await getSession(t.id, { extra })
       setSession(q)
       setSessionIndex(0)
       setSessionResults([])
@@ -243,13 +243,13 @@ export default function App() {
       case 'today': return <S_Today today={todaySummary} onStart={(t) => { void startSession(t) }} onOpen={openTrack} onNav={nav} />
       case 'stats': return <S_Stats tracks={hasBackend ? (tracks ?? []) : undefined} onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
-      case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => { void startSession() }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
+      case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={(extra) => { void startSession(undefined, extra) }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
       case 'edit': return <S_Edit track={hasBackend ? selected ?? undefined : undefined} onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={onDeleteTrack} onEditExam={hasBackend ? onEditExam : undefined} />
       // 트랙 추가: zip 업로드 → 완료 → 시험일 설정 → (백엔드)홈 / (데모)대시보드
       case 'upload': return <S_Upload upload={hasBackend ? importZip : undefined} onBack={() => setScreen('home')} onDone={onUploaded} />
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} initialISO={editingExam ? selected?.examDate ?? null : null} onSave={onExamSave} onCancel={editingExam ? onExamCancel : undefined} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
-      case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
+      case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} onExplain={hasBackend && selected && currentItem ? (ex) => gradeExplanation(selected.id, currentItem.conceptId, ex) : undefined} />
       case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} />
       case 'summary': return <S_Summary results={sessionResults} completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onReviewAgain={hasAgainReview ? startAgainReview : undefined} onDone={() => setScreen('dashboard')} />

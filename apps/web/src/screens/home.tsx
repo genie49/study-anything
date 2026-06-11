@@ -179,13 +179,13 @@ export function S_Empty({ onAdd, onNav }: { onAdd?: () => void; onNav?: (t: 'hom
 // 2. 트랙 대시보드. track 제공 시 실데이터(정직 — 가짜 건강/진도 없이 스케줄러 대기
 // 안내), 미제공 시 데모 목업.
 export function S_Dashboard({ track, defaultInfo = false, onStart, onEdit, onBack }: {
-  track?: Track; defaultInfo?: boolean; onStart?: () => void; onEdit?: () => void; onBack?: () => void
+  track?: Track; defaultInfo?: boolean; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void
 }) {
   if (track) return <RealDashboard track={track} onStart={onStart} onEdit={onEdit} onBack={onBack} />
   return <DemoDashboard defaultInfo={defaultInfo} onStart={onStart} onEdit={onEdit} onBack={onBack} />
 }
 
-function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onStart?: () => void; onEdit?: () => void; onBack?: () => void }) {
+function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void }) {
   const [plan, setPlan] = useState<TrackPlan | null>(null)
   const [info, setInfo] = useState(false)
   // 세션 완료 후 대시보드 복귀 시 화면 전환으로 이 컴포넌트가 remount → getPlan 재호출 → 갱신된 숫자 반영.
@@ -236,10 +236,18 @@ function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onSta
               </div>
             </div>
 
+            {/* 학습은 언제나 가능 — 오늘 할당량이 있으면 일반 시작, 없으면(소진/실현 어려움) 추가 학습. */}
             <div style={{ marginTop: 'auto' }}>
               {plan.todayTotal > 0
-                ? <Btn primary onClick={onStart}>▶  오늘 학습 시작 ({plan.todayTotal}문항)</Btn>
-                : <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center' }}>오늘 할 분량이 없어요 ✓</div>}
+                ? <Btn primary onClick={() => onStart?.(false)}>▶  오늘 학습 시작 ({plan.todayTotal}문항)</Btn>
+                : (
+                  <>
+                    <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center', marginBottom: 10 }}>
+                      {plan.suspendNew && !plan.feasible ? '남은 기간이 빠듯해 신규 도입은 잠시 멈췄어요' : '오늘 할당량을 모두 끝냈어요 ✓'}
+                    </div>
+                    <Btn primary onClick={() => onStart?.(true)}>＋  추가 학습 시작</Btn>
+                  </>
+                )}
             </div>
           </>
         )}
