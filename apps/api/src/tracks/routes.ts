@@ -6,6 +6,7 @@ import { validateBundle, importBundle, type SoulBundle } from './import'
 import { bundleFromZip } from './unzip'
 import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
 import { getTrackPlan } from './plan'
+import { getTrackStats } from './stats'
 import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
@@ -21,6 +22,13 @@ tracks.get('/:id/plan', requireAuth, async (c) => {
   const plan = await getTrackPlan(c.get('userId'), c.req.param('id') ?? '')
   if (!plan) return c.json({ error: 'track not found' }, 404)
   return c.json({ ok: true, plan })
+})
+
+// 트랙 통계(통계 #10) — cardStates/reviewLogs 집계. 정직한 실수치만.
+tracks.get('/:id/stats', requireAuth, async (c) => {
+  const stats = await getTrackStats(c.get('userId'), c.req.param('id') ?? '')
+  if (!stats) return c.json({ error: 'track not found' }, 404)
+  return c.json({ ok: true, stats })
 })
 
 // 오늘 학습 세션 큐 — 실제 카드/개념 콘텐츠를 반환. 상태 갱신은 제출 API에서 처리한다.

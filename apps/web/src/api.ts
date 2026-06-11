@@ -13,6 +13,13 @@ export type TrackPlan = {
   todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
   backlog: number; newRemaining: number; feasible: boolean
 }
+export type GradeDist = { again: number; hard: number; good: number; easy: number }
+export type DayCount = { day: string; count: number }
+export type TrackStats = {
+  total: number; mastered: number; progressPct: number
+  totalReviews: number; accuracy: number | null
+  byGrade: GradeDist; last7: DayCount[]
+}
 export type SessionItem = {
   stateId: string; cardId: string; mode: 'new' | 'review'; type: string
   prompt: string; answer: string; explanation: string; hint: string | null; distractors: string[]
@@ -55,6 +62,13 @@ export async function getPlan(id: string): Promise<TrackPlan> {
   const res = await authedFetch(`/tracks/${id}/plan`)
   if (!res.ok) throw new Error(`플랜 조회 실패 (${await errorMessage(res)})`)
   return (await res.json() as { plan: TrackPlan }).plan
+}
+
+// GET /tracks/:id/stats — cardStates/reviewLogs 집계(정직한 실수치).
+export async function getStats(id: string): Promise<TrackStats> {
+  const res = await authedFetch(`/tracks/${id}/stats`)
+  if (!res.ok) throw new Error(`통계 조회 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { stats: TrackStats }).stats
 }
 
 // GET /tracks/:id/session — 오늘 학습할 실제 카드/개념 큐.

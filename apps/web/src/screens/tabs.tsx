@@ -1,9 +1,10 @@
 // 오늘 · 통계 · 설정 + 건강 배너 매핑 — screens-tabs.jsx 이식.
+import { useState, useEffect } from 'react'
 import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Btn, Marker, TabBar } from '../design/kit'
 import { RetentionChart, HealthTrend } from '../design/charts'
 import { HEALTH_DISPLAY } from './home'
-import type { Track } from '../api'
+import { getStats, type Track, type TrackStats } from '../api'
 import type { TodaySummary } from '../today'
 
 type TabName = 'home' | 'today' | 'stats' | 'settings'
@@ -122,8 +123,127 @@ function DemoToday({ onStart, onNav }: { onStart?: () => void; onNav?: (t: TabNa
   )
 }
 
-// 10. 통계
-export function S_Stats({ onNav }: { onNav?: (t: TabName) => void }) {
+// 10. 통계. tracks 제공 시 실데이터(정직 — 집계 가능한 수치만), undefined=데모 목업.
+export function S_Stats({ tracks, onNav }: { tracks?: Track[]; onNav?: (t: TabName) => void }) {
+  if (tracks === undefined) return <DemoStats onNav={onNav} />
+  return <RealStats tracks={tracks} onNav={onNav} />
+}
+
+const GRADE_LABEL: { key: keyof TrackStats['byGrade']; label: string; tone: Tone }[] = [
+  { key: 'again', label: '다시', tone: 'danger' },
+  { key: 'hard', label: '어려움', tone: 'warn' },
+  { key: 'good', label: '좋음', tone: 'mid' },
+  { key: 'easy', label: '쉬움', tone: 'ok' },
+]
+
+function RealStats({ tracks, onNav }: { tracks: Track[]; onNav?: (t: TabName) => void }) {
+  const [activeId, setActiveId] = useState<string | null>(tracks[0]?.id ?? null)
+  const [stats, setStats] = useState<TrackStats | null>(null)
+
+  useEffect(() => {
+    if (!activeId) return
+    setStats(null)
+    void getStats(activeId).then(setStats).catch(() => setStats(null))
+  }, [activeId])
+
+  const maxDay = stats ? Math.max(1, ...stats.last7.map((d) => d.count)) : 1
+  const gradeTotal = stats ? GRADE_LABEL.reduce((a, g) => a + stats.byGrade[g.key], 0) : 0
+
+  return (
+    <Screen>
+      <TopBar title="통계" big />
+      <Body gap={16}>
+        {tracks.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: WF.ink3, textAlign: 'center', padding: '24px 0' }}>아직 트랙이 없어요.</div>
+        ) : (
+          <>
+            {/* 트랙 선택 */}
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              {tracks.map((t) => {
+                const on = t.id === activeId
+                return (
+                  <span key={t.id} onClick={() => setActiveId(t.id)} style={{
+                    fontFamily: WF.mono, fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
+                    border: `1px solid ${on ? WF.ink : WF.line}`, background: on ? WF.fill1 : 'transparent', fontWeight: on ? 600 : 400,
+                  }}>{t.title}</span>
+                )
+              })}
+            </div>
+
+            {!stats ? (
+              <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center', padding: '8px 0' }}>불러오는 중…</div>
+            ) : (
+              <>
+                {/* 진행률 */}
+                <Card>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
+                    <span style={{ fontSize: 13, color: WF.ink2 }}>진행률 <span style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3 }}>숙달 / 전체</span></span>
+                    <span style={{ fontSize: 19, fontWeight: 700 }}>{stats.mastered}/{stats.total}</span>
+                  </div>
+                  <Bar pct={stats.progressPct} dark />
+                </Card>
+
+                {/* 누적 복습 · 정답률 */}
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <StatTile label="누적 복습" value={`${stats.totalReviews}`} unit="회" />
+                  <StatTile label="정답률" value={stats.accuracy === null ? '—' : `${Math.round(stats.accuracy * 100)}`} unit={stats.accuracy === null ? '' : '%'} />
+                </div>
+
+                {/* 등급 분포 */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 9 }}>등급 분포 <span style={{ color: WF.ink3, fontWeight: 400, fontFamily: WF.mono, fontSize: 11 }}>grade</span></div>
+                  {gradeTotal === 0 ? (
+                    <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3 }}>아직 채점 이력이 없어요.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {GRADE_LABEL.map((g) => {
+                        const n = stats.byGrade[g.key]
+                        return (
+                          <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12.5, width: 44, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6 }}><Marker tone={g.tone} size={8} />{g.label}</span>
+                            <Bar pct={Math.round((n / gradeTotal) * 100)} />
+                            <span style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink2, width: 22, textAlign: 'right' }}>{n}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 최근 7일 활동 */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>최근 7일 활동 <span style={{ color: WF.ink3, fontWeight: 400, fontFamily: WF.mono, fontSize: 11 }}>복습 수</span></div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 76, padding: '0 2px' }}>
+                    {stats.last7.map((d, i) => (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontFamily: WF.mono, fontSize: 9.5, color: d.count ? WF.ink2 : WF.ink3 }}>{d.count}</span>
+                        <div style={{ width: '100%', height: Math.round((d.count / maxDay) * 46) + 2, background: d.count ? WF.inkSolid : WF.fill2, borderRadius: 3 }} />
+                        <span style={{ fontFamily: WF.mono, fontSize: 8.5, color: WF.ink3 }}>{d.day.slice(3)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </Body>
+      <TabBar active="stats" onNav={onNav} />
+    </Screen>
+  )
+}
+
+function StatTile({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <Card style={{ flex: 1, textAlign: 'center', padding: '14px 10px' }}>
+      <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink2, marginBottom: 8 }}>{label}</div>
+      <div><span style={{ fontSize: 24, fontWeight: 700 }}>{value}</span><span style={{ fontSize: 13, color: WF.ink2, marginLeft: 3 }}>{unit}</span></div>
+    </Card>
+  )
+}
+
+// 데모 목업(백엔드 없음) — 보유율 곡선·건강 추이는 시계열 미저장이라 데모에서만.
+function DemoStats({ onNav }: { onNav?: (t: TabName) => void }) {
   return (
     <Screen>
       <TopBar title="통계" big />

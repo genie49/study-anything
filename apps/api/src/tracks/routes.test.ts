@@ -95,6 +95,48 @@ describe('GET /tracks/:id/session', () => {
   })
 })
 
+describe('GET /tracks/:id/stats', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks/abc/stats')).status).toBe(401)
+  })
+  it('없는 트랙 → 404', async () => {
+    const res = await app.request('/tracks/64b2f0000000000000000000/stats', { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(404)
+  })
+  it('답안 제출 이력이 통계에 반영(정답률·복습수)', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '통계'
+    b.manifest.title = '통계'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    // 갓 import → 복습 0, 정답률 null.
+    const s0 = await app.request(`/tracks/${trackId}/stats`, { headers: auth })
+    expect(s0.status).toBe(200)
+    const { stats: before } = await s0.json() as { stats: { total: number; totalReviews: number; accuracy: number | null; last7: unknown[] } }
+    expect(before.total).toBe(1)
+    expect(before.totalReviews).toBe(0)
+    expect(before.accuracy).toBeNull()
+    expect(before.last7).toHaveLength(7)
+
+    // 정답 제출 → 복습 1, 정답률 1.
+    const sessionRes = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const { session } = await sessionRes.json() as { session: { items: { stateId: string; cardId: string }[] } }
+    const item = session.items[0]
+    await app.request(`/tracks/${trackId}/session/answer`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'a' }),
+    })
+
+    const s1 = await app.request(`/tracks/${trackId}/stats`, { headers: auth })
+    const { stats: after } = await s1.json() as { stats: { totalReviews: number; accuracy: number | null; byGrade: { good: number } } }
+    expect(after.totalReviews).toBe(1)
+    expect(after.accuracy).toBe(1)
+    expect(after.byGrade.good).toBe(1)
+  })
+})
+
 describe('GET /tracks/:id/session — 인터리빙(§7.4)', () => {
   // 2개념 × 2카드. 신규 throttle을 피하려 import 후 전 카드를 "연체 복습"으로 시딩.
   function twoConceptBundle(slug: string): SoulBundle {
