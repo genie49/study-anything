@@ -158,6 +158,50 @@ describe('POST /tracks/:id/session/answer', () => {
   })
 })
 
+describe('학습 루프: 답안 제출 → 다음 큐·플랜 갱신', () => {
+  // 단일 카드로 결정론적 검증: 정답 시 dueAt이 미래로 밀려(consolidating) 다음 큐에서 빠진다.
+  // now 주입 없이도 실시간 < 미래 dueAt 이므로 안정적.
+  it('정답 제출 후 카드가 다음 세션에서 빠지고 newRemaining이 감소', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '학습루프'
+    b.manifest.title = '학습루프'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    // 초기: 세션 신규 1문항, 플랜 newRemaining 1
+    const s1 = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const { session: before } = await s1.json() as { session: { total: number; items: { stateId: string; cardId: string; mode: string }[] } }
+    expect(before.total).toBe(1)
+    expect(before.items[0].mode).toBe('new')
+    const item = before.items[0]
+
+    const p1 = await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    const { plan: planBefore } = await p1.json() as { plan: { newRemaining: number; total: number } }
+    expect(planBefore.newRemaining).toBe(1)
+    expect(planBefore.total).toBe(1)
+
+    // 정답 제출
+    const ans = await app.request(`/tracks/${trackId}/session/answer`, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'a' }),
+    })
+    expect(ans.status).toBe(200)
+
+    // 다음 세션: 빈 큐 (정답 카드는 미래로 밀려 오늘 대상 아님)
+    const s2 = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const { session: after } = await s2.json() as { session: { total: number } }
+    expect(after.total).toBe(0)
+
+    // 다음 플랜: newRemaining 1→0 (총 카드 수는 유지)
+    const p2 = await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    const { plan: planAfter } = await p2.json() as { plan: { newRemaining: number; total: number } }
+    expect(planAfter.newRemaining).toBe(0)
+    expect(planAfter.total).toBe(1)
+  })
+})
+
 describe('PATCH /tracks/:id', () => {
   it('인증 없으면 401', async () => {
     const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })
