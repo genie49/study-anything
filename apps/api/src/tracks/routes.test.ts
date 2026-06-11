@@ -1,0 +1,88 @@
+// 트랙 라우트 HTTP-레벨 테스트 — 인증 게이트 + userId 흐름 검증(파괴적 DELETE 보험).
+// Redis denylist만 모킹(미연결 환경), 나머지는 실제 app + 인메모리 Mongo.
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+import { MongoMemoryServer } from 'mongodb-memory-server'
+import { ObjectId } from 'mongodb'
+
+// requireAuth가 호출하는 denylist 조회만 무력화(Redis 불필요).
+vi.mock('../auth/store', async (orig) => ({
+  ...(await orig<typeof import('../auth/store')>()),
+  isDenied: async () => false,
+}))
+
+import app from '../app'
+import { connectMongo, closeMongo, getDb } from '../db/mongo'
+import { signAccess } from '../auth/jwt'
+import { importBundle, type SoulBundle } from './import'
+
+let mongod: MongoMemoryServer
+const USER = 'user-route-1'
+const OTHER = 'user-route-2'
+
+beforeAll(async () => {
+  mongod = await MongoMemoryServer.create()
+  process.env.MONGO_URL = mongod.getUri('study')
+  await connectMongo()
+}, 60_000)
+afterAll(async () => { await closeMongo(); await mongod?.stop() })
+
+function bundle(): SoulBundle {
+  return {
+    manifest: { soulVersion: 1, trackSlug: '토익', title: '토익', decks: [{ slug: 'd1', title: 'Deck 1', order: 1 }] },
+    decks: [{ deckSlug: 'd1', concepts: [{ conceptKey: 'pp', title: 'T', bodyMd: '#', order: 1,
+      cards: [{ cardKey: 'c1', type: 'qa', prompt: 'q', answer: 'a', explanation: 'e', difficultyPrior: 0.3 }] }] }],
+  }
+}
+async function bearer(userId: string): Promise<string> {
+  const { token } = await signAccess(userId)
+  return `Bearer ${token}`
+}
+
+describe('PATCH /tracks/:id', () => {
+  it('인증 없으면 401', async () => {
+    const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })
+    expect(res.status).toBe(401)
+  })
+
+  it('시험일 설정 — 200 + examDate 영속화', async () => {
+    const { trackId } = await importBundle(USER, bundle())
+    const res = await app.request(`/tracks/${trackId}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: await bearer(USER) },
+      body: JSON.stringify({ examDate: '2026-07-15' }),
+    })
+    expect(res.status).toBe(200)
+    const json = await res.json() as { ok: boolean; track: { examDate: string } }
+    expect(json.track.examDate).toBe(new Date('2026-07-15').toISOString())
+  })
+
+  it('빈 패치 → 400', async () => {
+    const { trackId } = await importBundle(USER, bundle())
+    const res = await app.request(`/tracks/${trackId}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', authorization: await bearer(USER) }, body: '{}',
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('DELETE /tracks/:id', () => {
+  it('인증 없으면 401', async () => {
+    const res = await app.request('/tracks/abc', { method: 'DELETE' })
+    expect(res.status).toBe(401)
+  })
+
+  it('남의 트랙 삭제는 404 + 데이터 보존', async () => {
+    const { trackId } = await importBundle(USER, bundle())
+    const res = await app.request(`/tracks/${trackId}`, { method: 'DELETE', headers: { authorization: await bearer(OTHER) } })
+    expect(res.status).toBe(404)
+    expect(await getDb().collection('tracks').countDocuments({ _id: new ObjectId(trackId) })).toBe(1)
+  })
+
+  it('내 트랙 삭제 — 200 + cascade', async () => {
+    const { trackId } = await importBundle(USER, bundle())
+    const res = await app.request(`/tracks/${trackId}`, { method: 'DELETE', headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const json = await res.json() as { ok: boolean; deleted: Record<string, number> }
+    expect(json.deleted.tracks).toBe(1)
+    expect(await getDb().collection('cards').countDocuments({ trackId: new ObjectId(trackId) })).toBe(0)
+  })
+})
