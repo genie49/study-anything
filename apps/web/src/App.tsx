@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
 import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
-import { getTracks, getSession, importZip, patchTrack, deleteTrack, submitAnswer, type AnswerResult, type ImportSummary, type SessionQueue, type Track } from './api'
+import { getTracks, getSession, importZip, patchTrack, deleteTrack, submitAnswer, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
@@ -142,6 +142,30 @@ export default function App() {
     }
     setScreen('summary')
   }
+  const againReviewItems = (): SessionItem[] => {
+    if (!session) return []
+    const itemsByCardId = new Map(session.items.map((item) => [item.cardId, item]))
+    const latestByCardId = new Map<string, AnswerResult>()
+    for (const result of sessionResults) latestByCardId.set(result.cardId, result)
+    return [...latestByCardId.values()]
+      .filter((result) => result.grade === 'again')
+      .map((result) => itemsByCardId.get(result.cardId))
+      .filter((item): item is SessionItem => Boolean(item))
+  }
+
+  const startAgainReview = () => {
+    if (!session) return
+    const reviewItems = againReviewItems()
+    if (reviewItems.length === 0) return
+    setSession({ trackId: session.trackId, total: reviewItems.length, items: reviewItems })
+    setSessionIndex(0)
+    setSessionResults([])
+    setRequeuedCardIds(new Set())
+    setAnswerResult(null)
+    setSubmitError(null)
+    setSubmitPending(false)
+    setScreen('concept')
+  }
 
   // 홈: 백엔드 모드는 실데이터(빈 목록→S_Empty, 로딩→스피너), 데모 모드는 목업.
   const homeView = () => {
@@ -183,6 +207,7 @@ export default function App() {
     const currentItem = session?.items[sessionIndex]
     const totalItems = session?.items.length ?? 42
     const done = hasBackend ? sessionResults.length : 0
+    const hasAgainReview = againReviewItems().length > 0
     switch (screen) {
       case 'home': return homeView()
       case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
@@ -197,7 +222,7 @@ export default function App() {
       case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
       case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} />
-      case 'summary': return <S_Summary completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onDone={() => setScreen('dashboard')} />
+      case 'summary': return <S_Summary results={sessionResults} completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onReviewAgain={hasAgainReview ? startAgainReview : undefined} onDone={() => setScreen('dashboard')} />
       default: return homeView()
     }
   }

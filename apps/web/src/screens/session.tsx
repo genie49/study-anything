@@ -240,9 +240,39 @@ export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial
 }
 
 // 8. 세션 완료 요약
-export function S_Summary({ completed = 42, correct, onDone }: { completed?: number; correct?: number; onDone?: () => void }) {
+function shortDueLabel(dueAt?: string): string {
+  if (!dueAt) return '대기 중'
+  const d = new Date(dueAt)
+  if (Number.isNaN(d.getTime())) return '대기 중'
+  const now = new Date()
+  const dueDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const diff = Math.round((dueDay - today) / 86400000)
+  if (diff <= 0) return '오늘'
+  if (diff === 1) return '내일'
+  if (diff < 7) return `${diff}일 뒤`
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+export function S_Summary({ results, completed = 42, correct, onReviewAgain, onDone }: {
+  results?: AnswerResult[]; completed?: number; correct?: number; onReviewAgain?: () => void; onDone?: () => void
+}) {
   const accuracy = correct == null || completed === 0 ? 81 : Math.round((correct / completed) * 100)
   const stats: [string, string][] = [[String(completed), '문항'], [`${accuracy}%`, '정답률'], ['-', '학습시간']]
+  const counts = {
+    again: results?.filter((r) => r.grade === 'again').length ?? 0,
+    hard: results?.filter((r) => r.grade === 'hard').length ?? 0,
+    good: results?.filter((r) => r.grade === 'good').length ?? 0,
+    easy: results?.filter((r) => r.grade === 'easy').length ?? 0,
+  }
+  const reviewCount = counts.again + counts.hard
+  const nextDue = results?.map((r) => r.dueAt).filter(Boolean).sort()[0]
+  const gradeStats: [string, number, Tone][] = [
+    ['다시', counts.again, 'danger'],
+    ['어려움', counts.hard, 'warn'],
+    ['좋음', counts.good, 'ok'],
+    ['쉬움', counts.easy, 'cool'],
+  ]
   return (
     <Screen>
       <Body style={{ paddingTop: 40, paddingLeft: 28, paddingRight: 28, gap: 0, alignItems: 'center', textAlign: 'center' }}>
@@ -257,18 +287,27 @@ export function S_Summary({ completed = 42, correct, onDone }: { completed?: num
           ))}
         </div>
         <Card style={{ width: '100%', marginTop: 30, textAlign: 'left', padding: '16px 18px' }}>
-          <div style={{ fontSize: 12, color: WF.ink2, fontFamily: WF.mono, marginBottom: 10 }}>시험당일 예측 · R(examDate)</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
-            <span style={{ fontSize: 14, color: WF.ink2 }}>목표 90%</span>
-            <span style={{ fontSize: 20, fontWeight: 700 }}>현재 84% <span style={{ fontSize: 13, color: WF.ink2 }}>↑</span></span>
+          <div style={{ fontSize: 12, color: WF.ink2, fontFamily: WF.mono, marginBottom: 12 }}>오늘 채점</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+            {gradeStats.map(([label, value, tone]) => (
+              <div key={label} style={{ border: `1px solid ${TONE[tone].c}`, background: value > 0 ? TONE[tone].bg : WF.paper, borderRadius: 10, padding: '10px 0', textAlign: 'center' }}>
+                <div style={{ fontFamily: WF.mono, fontSize: 18, fontWeight: 700 }}>{value}</div>
+                <div style={{ fontSize: 11.5, color: WF.ink2, marginTop: 3 }}>{label}</div>
+              </div>
+            ))}
           </div>
-          <Bar pct={84} dark />
         </Card>
         <Card style={{ width: '100%', marginTop: 12, textAlign: 'left', padding: '15px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 13.5, color: WF.ink2 }}>다음 복습</span>
-          <span style={{ fontFamily: WF.mono, fontSize: 14, fontWeight: 600 }}>오늘 21:00</span>
+          <div>
+            <div style={{ fontSize: 13.5, color: WF.ink2 }}>다음 복습</div>
+            <div style={{ fontSize: 12, color: WF.ink3, marginTop: 3 }}>어려웠던 카드 {reviewCount}개</div>
+          </div>
+          <span style={{ fontFamily: WF.mono, fontSize: 14, fontWeight: 600 }}>{shortDueLabel(nextDue)}</span>
         </Card>
-        <div style={{ marginTop: 'auto', width: '100%', paddingTop: 22 }}><Btn primary onClick={onDone}>대시보드로 ›</Btn></div>
+        <div style={{ marginTop: 'auto', width: '100%', paddingTop: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {onReviewAgain && <Btn ghost onClick={onReviewAgain}>오답만 다시 풀기</Btn>}
+          <Btn primary onClick={onDone}>대시보드로 ›</Btn>
+        </div>
       </Body>
     </Screen>
   )
