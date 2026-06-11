@@ -37,6 +37,17 @@ function toView(doc: Record<string, unknown>): TrackView {
   }
 }
 
+// 트랙 목록(홈 #1) — 저장된 필드만(name·slug·examDate·status). 파생값(건강·진도·
+// 오늘 분량)은 스케줄러 영역이라 여기서 계산하지 않는다(그게 dumb-read 경계).
+export async function listTracks(userId: string): Promise<TrackView[]> {
+  const db = getDb()
+  const docs = await db.collection('tracks')
+    .find({ userId, status: { $ne: 'deleted' } })
+    .sort({ createdAt: 1 })
+    .toArray()
+  return docs.map(toView)
+}
+
 // 부분 수정. 소유자(userId) 스코프 밖이거나 잘못된 id면 null(→ 404).
 export async function updateTrack(userId: string, trackId: string, patch: TrackPatch): Promise<TrackView | null> {
   if (!ObjectId.isValid(trackId)) return null
