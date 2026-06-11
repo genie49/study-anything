@@ -1,6 +1,6 @@
 // .soul 번들 → DB 결정적 upsert. userId는 호출자(JWT)가 주입. auth.md / data-pipeline §3.
 import { createHash } from 'node:crypto'
-import { ObjectId } from 'mongodb'
+import { ObjectId, type AnyBulkWriteOperation, type Collection } from 'mongodb'
 import { getDb } from '../db/mongo.js'
 
 const CARD_TYPES = new Set(['cloze', 'qa', 'mcq', 'application'])
@@ -24,6 +24,16 @@ export type SoulBundle = {
 export type ImportSummary = { trackId: string; trackSlug: string; title: string; decks: number; concepts: number; cards: number; archived: number }
 
 const sha1 = (s: string) => 'sha1:' + createHash('sha1').update(s).digest('hex')
+
+function logImportPhase(trackSlug: string, phase: string, start: number, extra = '') {
+  console.log(`[import] ${trackSlug} ${phase} ${Date.now() - start}ms${extra ? ` ${extra}` : ''}`)
+}
+
+async function bulkWriteUnordered(collection: Collection, operations: AnyBulkWriteOperation[], chunkSize = 500) {
+  for (let i = 0; i < operations.length; i += chunkSize) {
+    await collection.bulkWrite(operations.slice(i, i + chunkSize), { ordered: false })
+  }
+}
 
 // validate_soul.py의 핵심 규칙을 런타임에 재확인. 통과해야 import.
 export function validateBundle(b: unknown): string[] {
@@ -81,6 +91,7 @@ export async function importBundle(userId: string, bundle: SoulBundle): Promise<
   const db = getDb()
   const now = new Date()
   const { manifest } = bundle
+  const startedAt = Date.now()
 
   // 1) track
   const track = await db.collection('tracks').findOneAndUpdate(
@@ -92,67 +103,135 @@ export async function importBundle(userId: string, bundle: SoulBundle): Promise<
     { upsert: true, returnDocument: 'after' },
   )
   const trackId = track!._id as ObjectId
+  logImportPhase(manifest.trackSlug, 'track', startedAt)
 
   // 2) decks (manifest 기준 order/title)
+  const deckSlugs = manifest.decks.map((d) => d.slug)
+  await bulkWriteUnordered(
+    db.collection('decks'),
+    manifest.decks.map((d) => ({
+      updateOne: {
+        filter: { userId, trackId, deckSlug: d.slug },
+        update: {
+          $set: { title: d.title, order: d.order, sourceRef: d.sourceRef ?? null },
+          $setOnInsert: { userId, trackId, deckSlug: d.slug, createdAt: now },
+        },
+        upsert: true,
+      },
+    })),
+  )
+  const deckDocs = await db.collection('decks')
+    .find({ userId, trackId, deckSlug: { $in: deckSlugs } })
+    .project({ _id: 1, deckSlug: 1 })
+    .toArray()
   const deckIdBySlug = new Map<string, ObjectId>()
-  for (const d of manifest.decks) {
-    const deck = await db.collection('decks').findOneAndUpdate(
-      { userId, trackId, deckSlug: d.slug },
-      { $set: { title: d.title, order: d.order, sourceRef: d.sourceRef ?? null }, $setOnInsert: { userId, trackId, deckSlug: d.slug, createdAt: now } },
-      { upsert: true, returnDocument: 'after' },
-    )
-    deckIdBySlug.set(d.slug, deck!._id as ObjectId)
+  for (const d of deckDocs) {
+    deckIdBySlug.set(d.deckSlug as string, d._id as ObjectId)
   }
+  logImportPhase(manifest.trackSlug, 'decks', startedAt, `count=${deckIdBySlug.size}`)
 
   // 3) concepts + cards
-  const conceptIdByKey = new Map<string, ObjectId>()
-  const confusablePending: { conceptId: ObjectId; refs: string[] }[] = []
-  const seenSoulKeys: string[] = []
-  let conceptCount = 0, cardCount = 0
-
+  const conceptRows: Array<{ deckId: ObjectId | null; concept: SoulConcept }> = []
   for (const dp of bundle.decks) {
     const deckId = deckIdBySlug.get(dp.deckSlug) ?? null
     for (const c of dp.concepts) {
-      const concept = await db.collection('concepts').findOneAndUpdate(
-        { userId, trackId, conceptKey: c.conceptKey },
-        { $set: { deckId, title: c.title, bodyMd: c.bodyMd, elaboration: c.elaboration ?? null, order: c.order }, $setOnInsert: { userId, trackId, conceptKey: c.conceptKey, createdAt: now } },
-        { upsert: true, returnDocument: 'after' },
-      )
-      const conceptId = concept!._id as ObjectId
-      conceptIdByKey.set(c.conceptKey, conceptId)
-      if (c.confusableWith?.length) confusablePending.push({ conceptId, refs: c.confusableWith })
-      conceptCount++
-
-      for (const card of c.cards) {
-        seenSoulKeys.push(card.cardKey)
-        const soulHash = sha1(JSON.stringify({ p: card.prompt, a: card.answer, d: card.distractors, e: card.explanation, t: card.type }))
-        const cardDoc = await db.collection('cards').findOneAndUpdate(
-          { userId, trackId, soulKey: card.cardKey },
-          {
-            $set: { conceptId, deckId, type: card.type, prompt: card.prompt, answer: card.answer, distractors: card.distractors ?? [], hint: card.hint ?? null, explanation: card.explanation, difficultyPrior: card.difficultyPrior, grading: card.grading ?? null, soulHash, status: 'active', updatedAt: now },
-            $setOnInsert: { userId, trackId, soulKey: card.cardKey, createdAt: now },
-          },
-          { upsert: true, returnDocument: 'after' },
-        )
-        const cardId = cardDoc!._id as ObjectId
-        // 진도 초기화(없을 때만) — 기존 진도 보존
-        await db.collection('cardStates').updateOne(
-          { userId, cardId },
-          { $setOnInsert: { userId, trackId, cardId, stage: 'new', S: 0, D: card.difficultyPrior, dueAt: now, reps: 0, lapses: 0, createdAt: now }, $set: { archived: false } },
-          { upsert: true },
-        )
-        cardCount++
-      }
+      conceptRows.push({ deckId, concept: c })
     }
   }
 
-  // 4) confusableWith conceptKey → ObjectId 해소
-  for (const { conceptId, refs } of confusablePending) {
-    const ids = refs.map((k) => conceptIdByKey.get(k)).filter((x): x is ObjectId => !!x)
-    await db.collection('concepts').updateOne({ _id: conceptId }, { $set: { confusableWith: ids } })
+  await bulkWriteUnordered(
+    db.collection('concepts'),
+    conceptRows.map(({ deckId, concept: c }) => ({
+      updateOne: {
+        filter: { userId, trackId, conceptKey: c.conceptKey },
+        update: {
+          $set: { deckId, title: c.title, bodyMd: c.bodyMd, elaboration: c.elaboration ?? null, order: c.order, confusableWith: [] },
+          $setOnInsert: { userId, trackId, conceptKey: c.conceptKey, createdAt: now },
+        },
+        upsert: true,
+      },
+    })),
+  )
+  const conceptKeys = conceptRows.map(({ concept }) => concept.conceptKey)
+  const conceptDocs = await db.collection('concepts')
+    .find({ userId, trackId, conceptKey: { $in: conceptKeys } })
+    .project({ _id: 1, conceptKey: 1 })
+    .toArray()
+  const conceptIdByKey = new Map<string, ObjectId>()
+  for (const c of conceptDocs) {
+    conceptIdByKey.set(c.conceptKey as string, c._id as ObjectId)
   }
 
-  // 5) orphan soft-delete — 새 번들에 없는 기존 카드 + 그 진도 비활성
+  const confusableOps = conceptRows
+    .filter(({ concept }) => concept.confusableWith?.length)
+    .map(({ concept }) => ({
+      updateOne: {
+        filter: { _id: conceptIdByKey.get(concept.conceptKey) },
+        update: { $set: { confusableWith: (concept.confusableWith ?? []).map((k) => conceptIdByKey.get(k)).filter((x): x is ObjectId => !!x) } },
+      },
+    }))
+  if (confusableOps.length) {
+    await bulkWriteUnordered(db.collection('concepts'), confusableOps)
+  }
+  logImportPhase(manifest.trackSlug, 'concepts', startedAt, `count=${conceptRows.length}`)
+
+  const cardRows: Array<{ deckId: ObjectId | null; conceptId: ObjectId; card: SoulCard }> = []
+  for (const dp of bundle.decks) {
+    const deckId = deckIdBySlug.get(dp.deckSlug) ?? null
+    for (const c of dp.concepts) {
+      const conceptId = conceptIdByKey.get(c.conceptKey)
+      if (!conceptId) throw new Error(`concept id not found for '${c.conceptKey}'`)
+      for (const card of c.cards) cardRows.push({ deckId, conceptId, card })
+    }
+  }
+  const seenSoulKeys = cardRows.map(({ card }) => card.cardKey)
+
+  await bulkWriteUnordered(
+    db.collection('cards'),
+    cardRows.map(({ deckId, conceptId, card }) => {
+      const soulHash = sha1(JSON.stringify({ p: card.prompt, a: card.answer, d: card.distractors, e: card.explanation, t: card.type }))
+      return {
+        updateOne: {
+          filter: { userId, trackId, soulKey: card.cardKey },
+          update: {
+            $set: { conceptId, deckId, type: card.type, prompt: card.prompt, answer: card.answer, distractors: card.distractors ?? [], hint: card.hint ?? null, explanation: card.explanation, difficultyPrior: card.difficultyPrior, grading: card.grading ?? null, soulHash, status: 'active', updatedAt: now },
+            $setOnInsert: { userId, trackId, soulKey: card.cardKey, createdAt: now },
+          },
+          upsert: true,
+        },
+      }
+    }),
+  )
+  const cardDocs = await db.collection('cards')
+    .find({ userId, trackId, soulKey: { $in: seenSoulKeys } })
+    .project({ _id: 1, soulKey: 1 })
+    .toArray()
+  const cardIdBySoulKey = new Map<string, ObjectId>()
+  for (const c of cardDocs) {
+    cardIdBySoulKey.set(c.soulKey as string, c._id as ObjectId)
+  }
+  logImportPhase(manifest.trackSlug, 'cards', startedAt, `count=${cardRows.length}`)
+
+  await bulkWriteUnordered(
+    db.collection('cardStates'),
+    cardRows.map(({ card }) => {
+      const cardId = cardIdBySoulKey.get(card.cardKey)
+      if (!cardId) throw new Error(`card id not found for '${card.cardKey}'`)
+      return {
+        updateOne: {
+          filter: { userId, cardId },
+          update: {
+            $setOnInsert: { userId, trackId, cardId, stage: 'new', S: 0, D: card.difficultyPrior, dueAt: now, reps: 0, lapses: 0, createdAt: now },
+            $set: { archived: false },
+          },
+          upsert: true,
+        },
+      }
+    }),
+  )
+  logImportPhase(manifest.trackSlug, 'cardStates', startedAt, `count=${cardRows.length}`)
+
+  // 4) orphan soft-delete — 새 번들에 없는 기존 카드 + 그 진도 비활성
   const orphans = await db.collection('cards').find({ userId, trackId, status: 'active', soulKey: { $nin: seenSoulKeys } }).project({ _id: 1 }).toArray()
   let archived = 0
   if (orphans.length) {
@@ -161,6 +240,7 @@ export async function importBundle(userId: string, bundle: SoulBundle): Promise<
     await db.collection('cardStates').updateMany({ userId, cardId: { $in: ids } }, { $set: { archived: true } })
     archived = ids.length
   }
+  logImportPhase(manifest.trackSlug, 'orphans', startedAt, `archived=${archived}`)
 
-  return { trackId: String(trackId), trackSlug: manifest.trackSlug, title: manifest.title, decks: deckIdBySlug.size, concepts: conceptCount, cards: cardCount, archived }
+  return { trackId: String(trackId), trackSlug: manifest.trackSlug, title: manifest.title, decks: deckIdBySlug.size, concepts: conceptRows.length, cards: cardRows.length, archived }
 }

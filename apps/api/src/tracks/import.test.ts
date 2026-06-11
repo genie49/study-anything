@@ -83,4 +83,17 @@ describe('importBundle', () => {
     const st = await db.collection('cardStates').findOne({ userId: USER, cardId: c2!._id })
     expect(st?.archived).toBe(true)
   })
+
+  it('대량 카드 import — bulk 경로로 cardStates까지 생성', async () => {
+    const many = bundle(Array.from({ length: 120 }, (_, i) => `bulk-${i}`))
+    many.manifest.trackSlug = '토익-bulk'
+    many.manifest.title = '토익 bulk'
+
+    const s = await importBundle(`${USER}-bulk`, many)
+    expect(s.cards).toBe(121)
+
+    const db = getDb()
+    expect(await db.collection('cards').countDocuments({ userId: `${USER}-bulk`, status: 'active' })).toBe(121)
+    expect(await db.collection('cardStates').countDocuments({ userId: `${USER}-bulk`, archived: false })).toBe(121)
+  })
 })
