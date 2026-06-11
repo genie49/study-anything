@@ -21,6 +21,7 @@
 |---|---|---|
 | **저장(진실원천)** | `cardStates`(S·D·dueAt·stage·reps·lapses·lastReviewedAt·triaged·archived…) · `reviewLogs`(append-only) · `sessions` · `tracks`(examDate·dailyCapacity) | **인출 처리 시에만** 기록/갱신 |
 | **파생(요청 시 계산, 저장 안 함)** | 오늘 낼 카드 목록 · 진도 % · 건강상태(과부하/숙달/AHEAD) · 시험당일 예측 `R(examDate)` · 우선순위 · 트리아지 대상 | **읽을 때마다** `{userId,trackId}` 상태에서 순수 계산 |
+| **시계열 스냅샷(차트용)** | `trackSnapshots`(`{userId,trackId,day}` 유니크 · health·avgRExam·mastered·total·backlog) | 플랜 읽기 시 **그날치 1건 upsert**(앱 연 날만 → idle 날은 공백, 보간 금지). 통계 보유율 곡선·건강 추이의 정직한 백킹 |
 
 **왜 on-demand인가:**
 1. **미루기/몰아하기 흡수** — 미리 구운 "오늘 플랜"은 유저가 미루거나 더 하는 순간 거짓이 됨. 매 요청 재계산이라야 항상 현실 반영(§6).

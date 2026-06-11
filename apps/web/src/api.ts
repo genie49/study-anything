@@ -13,6 +13,7 @@ export type TrackPlan = {
   todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
   backlog: number; newRemaining: number; feasible: boolean
 }
+export type Snapshot = { day: string; health: HealthState; avgRExam: number | null; mastered: number; total: number; backlog: number }
 export type GradeDist = { again: number; hard: number; good: number; easy: number }
 export type DayCount = { day: string; count: number }
 export type TrackStats = {
@@ -62,6 +63,13 @@ export async function getPlan(id: string): Promise<TrackPlan> {
   const res = await authedFetch(`/tracks/${id}/plan`)
   if (!res.ok) throw new Error(`플랜 조회 실패 (${await errorMessage(res)})`)
   return (await res.json() as { plan: TrackPlan }).plan
+}
+
+// GET /tracks/:id/snapshots — 일별 스냅샷 시계열(보유율 곡선·건강 추이). 앱 연 날만 존재.
+export async function getSnapshots(id: string): Promise<Snapshot[]> {
+  const res = await authedFetch(`/tracks/${id}/snapshots`)
+  if (!res.ok) throw new Error(`스냅샷 조회 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { snapshots: Snapshot[] }).snapshots
 }
 
 // GET /tracks/:id/stats — cardStates/reviewLogs 집계(정직한 실수치).

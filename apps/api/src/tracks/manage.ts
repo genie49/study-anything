@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb'
 import { getDb } from '../db/mongo'
 
 // 트랙의 자식 컬렉션 — 삭제 시 cascade 대상(전부 {userId, trackId} 스코프).
-const CHILD_COLLECTIONS = ['decks', 'concepts', 'cards', 'cardStates', 'reviewLogs', 'sessions'] as const
+const CHILD_COLLECTIONS = ['decks', 'concepts', 'cards', 'cardStates', 'reviewLogs', 'sessions', 'trackSnapshots'] as const
 
 export type TrackPatch = { title?: string; examDate?: string | null }
 export type TrackView = { id: string; trackSlug: string; title: string; examDate: string | null; status: string }

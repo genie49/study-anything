@@ -7,6 +7,7 @@ import { bundleFromZip } from './unzip'
 import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
 import { getTrackPlan } from './plan'
 import { getTrackStats } from './stats'
+import { getTrackSnapshots } from './snapshots'
 import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
@@ -29,6 +30,13 @@ tracks.get('/:id/stats', requireAuth, async (c) => {
   const stats = await getTrackStats(c.get('userId'), c.req.param('id') ?? '')
   if (!stats) return c.json({ error: 'track not found' }, 404)
   return c.json({ ok: true, stats })
+})
+
+// 트랙 일별 스냅샷(통계 차트: 보유율 곡선·건강 추이) — 앱 연 날만 기록된 시계열.
+tracks.get('/:id/snapshots', requireAuth, async (c) => {
+  const rows = await getTrackSnapshots(c.get('userId'), c.req.param('id') ?? '')
+  if (!rows) return c.json({ error: 'track not found' }, 404)
+  return c.json({ ok: true, snapshots: rows })
 })
 
 // 오늘 학습 세션 큐 — 실제 카드/개념 콘텐츠를 반환. 상태 갱신은 제출 API에서 처리한다.

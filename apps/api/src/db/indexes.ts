@@ -15,6 +15,7 @@ export async function ensureIndexes(): Promise<void> {
     db.collection('cardStates').createIndex({ userId: 1, trackId: 1, triaged: 1 }),
     db.collection('reviewLogs').createIndex({ trackId: 1, ts: -1 }),
     db.collection('reviewLogs').createIndex({ cardId: 1, ts: -1 }),
+    db.collection('trackSnapshots').createIndex({ userId: 1, trackId: 1, day: 1 }, { unique: true }), // 하루 1건 upsert
     // 인증 — googleSub 유니크(중복 사용자 race 방지), refresh 해시 유니크 + TTL 자동만료
     db.collection('users').createIndex({ googleSub: 1 }, { unique: true }),
     db.collection('users').createIndex({ email: 1 }),
