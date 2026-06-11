@@ -1,9 +1,10 @@
 // 트랙 추가 — .soul zip 업로드 → 완료 요약 → 시험일 설정.
 // 흐름: 파일 선택 전 → zip 추가됨 → 업로드 중(로딩만) → 완료 → 시험일 설정 → 대시보드.
-// 백엔드 multipart 엔드포인트는 구현 예정 — 현재 업로드는 시뮬레이션, 파일 선택/표시는 실제.
+// upload 콜백 주입 시 실제 POST /tracks/import, 미주입 시 데모 시뮬레이션.
 import { useState, useRef } from 'react'
 import { WF, TONE } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Btn, Dday, Spinner, ZipGlyph, FileCard } from '../design/kit'
+import type { ImportSummary } from '../api'
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -11,23 +12,39 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// 업로드 결과 요약(목업) — 백엔드 import 응답({ decks, concepts, cards })으로 교체 예정.
-const MOCK_SUMMARY = { title: '토익', decks: 3, cards: 128, concepts: 24 }
+// 데모 요약(백엔드 없을 때).
+const MOCK_SUMMARY: ImportSummary = { trackId: 'demo', trackSlug: '토익', title: '토익', decks: 3, cards: 128, concepts: 24, archived: 0 }
 
-export function S_Upload({ onBack, onDone }: { onBack?: () => void; onDone?: () => void }) {
+export function S_Upload({ onBack, onDone, upload }: {
+  onBack?: () => void; onDone?: (r?: ImportSummary) => void; upload?: (f: File) => Promise<ImportSummary>
+}) {
   const [file, setFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<'select' | 'loading' | 'done'>('select')
+  const [summary, setSummary] = useState<ImportSummary>(MOCK_SUMMARY)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const pick = () => inputRef.current?.click()
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
-    if (f) setFile(f)
+    if (f) { setFile(f); setError(null) }
   }
-  // 실제 업로드: 백엔드 멀티파트 엔드포인트 준비 시 POST /tracks/import(zip)로 교체.
-  const upload = () => {
+  const doUpload = async () => {
+    if (!file) return
+    setError(null)
     setPhase('loading')
-    setTimeout(() => setPhase('done'), 1600)
+    if (upload) {
+      try {
+        const result = await upload(file)
+        setSummary(result)
+        setPhase('done')
+      } catch (e) {
+        setError((e as Error).message)
+        setPhase('select')
+      }
+    } else {
+      setTimeout(() => { setSummary(MOCK_SUMMARY); setPhase('done') }, 1600) // 데모
+    }
   }
 
   const hidden = (
@@ -54,11 +71,11 @@ export function S_Upload({ onBack, onDone }: { onBack?: () => void; onDone?: () 
 
           <Card style={{ marginTop: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 17, fontWeight: 700 }}>{MOCK_SUMMARY.title}</span>
+              <span style={{ fontSize: 17, fontWeight: 700 }}>{summary.title}</span>
               <Chip tone="off">시험일 설정 필요</Chip>
             </div>
             <div style={{ display: 'flex', gap: 22, marginTop: 14 }}>
-              {([['덱', MOCK_SUMMARY.decks], ['문항', MOCK_SUMMARY.cards], ['개념', MOCK_SUMMARY.concepts]] as [string, number][]).map(([k, v]) => (
+              {([['덱', summary.decks], ['문항', summary.cards], ['개념', summary.concepts]] as [string, number][]).map(([k, v]) => (
                 <div key={k}>
                   <div style={{ fontFamily: WF.mono, fontSize: 22, fontWeight: 700 }}>{v}</div>
                   <div style={{ fontSize: 12, color: WF.ink2, marginTop: 1 }}>{k}</div>
@@ -73,7 +90,7 @@ export function S_Upload({ onBack, onDone }: { onBack?: () => void; onDone?: () 
           </div>
 
           <div style={{ marginTop: 'auto', paddingTop: 20 }}>
-            <Btn primary onClick={onDone}>시험일 설정하기 ›</Btn>
+            <Btn primary onClick={() => onDone?.(summary)}>시험일 설정하기 ›</Btn>
           </div>
         </Body>
       </Screen>
@@ -108,8 +125,9 @@ export function S_Upload({ onBack, onDone }: { onBack?: () => void; onDone?: () 
         <Body gap={14} style={{ paddingTop: 16 }}>
           <div style={{ fontSize: 13, color: WF.ink2, fontWeight: 500 }}>추가할 파일</div>
           <FileCard name={file.name} size={formatBytes(file.size)} onRemove={() => setFile(null)} />
+          {error && <div style={{ fontSize: 13, color: TONE.danger.c, lineHeight: 1.5 }}>{error}</div>}
           <div style={{ marginTop: 'auto' }}>
-            <Btn primary onClick={upload}>업로드 하기</Btn>
+            <Btn primary onClick={doUpload}>업로드 하기</Btn>
           </div>
         </Body>
       </Screen>
@@ -143,18 +161,27 @@ const MONTH_DAYS = 30      // 2026년 6월
 const FIRST_DOW = 1        // 2026-06-01 = 월요일
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
-export function S_ExamDate({ onSave }: { onSave?: () => void }) {
+export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: string; onSave?: (examDateISO: string) => void }) {
   const [selected, setSelected] = useState(11)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const exam = new Date(2026, 5, selected)
   const today = new Date()
   const diff = Math.max(0, Math.ceil((exam.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000))
+  const isoDate = `2026-06-${String(selected).padStart(2, '0')}` // 캘린더는 현재 2026년 6월 고정(추후 동적화)
+
+  const save = async () => {
+    if (!onSave) return
+    setError(null); setSaving(true)
+    try { await onSave(isoDate) } catch (e) { setError((e as Error).message); setSaving(false) }
+  }
 
   return (
     <Screen>
       <TopBar title="시험일 설정" />
       <Body gap={16} style={{ paddingTop: 14 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 700 }}>토익 시험일은 언제인가요?</div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{trackTitle} 시험일은 언제인가요?</div>
           <div style={{ fontSize: 13.5, color: WF.ink2, marginTop: 6, lineHeight: 1.5 }}>
             시험일을 기준으로 매일의 학습량이 자동으로 배분돼요.
           </div>
@@ -192,8 +219,9 @@ export function S_ExamDate({ onSave }: { onSave?: () => void }) {
           <Dday n={diff} urgent={diff <= 3} />
         </div>
 
+        {error && <div style={{ fontSize: 13, color: TONE.danger.c, lineHeight: 1.5 }}>{error}</div>}
         <div style={{ marginTop: 'auto' }}>
-          <Btn primary onClick={onSave}>저장하고 학습 시작 ›</Btn>
+          <Btn primary onClick={save}>{saving ? '저장 중…' : '저장하고 학습 시작 ›'}</Btn>
         </div>
       </Body>
     </Screen>

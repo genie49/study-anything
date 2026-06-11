@@ -79,3 +79,27 @@ describe('auth flow (google 모킹)', () => {
     expect(res.status).toBe(401)
   })
 })
+
+// dev 게이트웨이(비프로덕션). 구글 우회 테스트 계정 로그인.
+describe('POST /auth/dev/login (dev 전용)', () => {
+  it('테스트 계정 세션 발급 — accessToken + refresh 쿠키 + user', async () => {
+    const res = await app.request('/auth/dev/login', { method: 'POST' })
+    expect(res.status).toBe(200)
+    const body = await res.json() as { accessToken: string; user: { email: string } }
+    expect(body.accessToken).toBeTruthy()
+    expect(body.user.email).toBe('dev@study-anything.test')
+    expect(refreshCookie(res)).toBeTruthy() // refresh 쿠키 set
+
+    // 발급된 access가 유효(서명 검증)하고 sub가 채워졌는지(Redis 불필요 — verifyAccess 직접)
+    const { verifyAccess } = await import('./jwt')
+    const payload = await verifyAccess(body.accessToken)
+    expect(payload.sub).toBeTruthy()
+  })
+
+  it('재호출해도 같은 계정(중복 생성 없음)', async () => {
+    await app.request('/auth/dev/login', { method: 'POST' })
+    await app.request('/auth/dev/login', { method: 'POST' })
+    const { getDb } = await import('../db/mongo')
+    expect(await getDb().collection('users').countDocuments({ googleSub: 'dev-test-account' })).toBe(1)
+  })
+})

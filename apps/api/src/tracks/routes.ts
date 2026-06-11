@@ -4,9 +4,15 @@ import { Hono, type Context } from 'hono'
 import { requireAuth, type AuthVars } from '../middleware/auth'
 import { validateBundle, importBundle, type SoulBundle } from './import'
 import { bundleFromZip } from './unzip'
-import { validateTrackPatch, updateTrack, deleteTrack, type TrackPatch } from './manage'
+import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
+
+// 트랙 목록(홈 #1) — 저장 필드만. 파생값은 스케줄러 구현 후.
+tracks.get('/', requireAuth, async (c) => {
+  const list = await listTracks(c.get('userId'))
+  return c.json({ ok: true, tracks: list })
+})
 
 // 업로드된 zip(멀티파트 'file' 또는 raw 바디)을 풀어 bundle로. 실패 시 에러 문자열 배열.
 async function bundleFromRequestZip(c: Context<{ Variables: AuthVars }>): Promise<{ bundle?: SoulBundle; errors: string[] }> {

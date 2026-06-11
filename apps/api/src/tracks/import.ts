@@ -21,7 +21,7 @@ export type SoulBundle = {
   decks: SoulDeckPayload[]
   examDate?: string
 }
-export type ImportSummary = { trackId: string; decks: number; concepts: number; cards: number; archived: number }
+export type ImportSummary = { trackId: string; trackSlug: string; title: string; decks: number; concepts: number; cards: number; archived: number }
 
 const sha1 = (s: string) => 'sha1:' + createHash('sha1').update(s).digest('hex')
 
@@ -162,5 +162,5 @@ export async function importBundle(userId: string, bundle: SoulBundle): Promise<
     archived = ids.length
   }
 
-  return { trackId: String(trackId), decks: deckIdBySlug.size, concepts: conceptCount, cards: cardCount, archived }
+  return { trackId: String(trackId), trackSlug: manifest.trackSlug, title: manifest.title, decks: deckIdBySlug.size, concepts: conceptCount, cards: cardCount, archived }
 }

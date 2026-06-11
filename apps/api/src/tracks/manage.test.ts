@@ -4,7 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server'
 import { ObjectId } from 'mongodb'
 import { connectMongo, closeMongo, getDb } from '../db/mongo'
 import { importBundle, type SoulBundle } from './import'
-import { validateTrackPatch, updateTrack, deleteTrack } from './manage'
+import { validateTrackPatch, updateTrack, deleteTrack, listTracks } from './manage'
 
 let mongod: MongoMemoryServer
 const USER = 'user-manage-1'
@@ -78,6 +78,24 @@ describe('updateTrack', () => {
 
   it('잘못된 ObjectId → null', async () => {
     expect(await updateTrack(USER, 'not-an-id', { title: 'x' })).toBeNull()
+  })
+})
+
+describe('listTracks', () => {
+  it('새 유저는 빈 목록', async () => {
+    expect(await listTracks('nobody')).toEqual([])
+  })
+
+  it('내 트랙만 — userId 스코프 + 저장 필드(examDate ISO)', async () => {
+    const trackId = await seedTrack(USER)
+    await seedTrack(OTHER) // 격리 확인용
+    await updateTrack(USER, trackId, { examDate: '2026-07-15' })
+
+    const list = await listTracks(USER)
+    expect(list).toHaveLength(1)
+    expect(list[0].trackSlug).toBe('토익')
+    expect(list[0].examDate).toBe(new Date('2026-07-15').toISOString())
+    expect(list[0]).not.toHaveProperty('health') // 파생값 없음(dumb read)
   })
 })
 

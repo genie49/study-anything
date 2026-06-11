@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from '../config'
 import { signAccess, signRefresh, verifyAccess, verifyRefresh } from './jwt'
 import { createAuthRequest, handleCallback } from './google'
-import { upsertUser, getUser, storeRefresh, consumeRefresh, revokeFamily, denyAccess } from './store'
+import { upsertUser, getUser, storeRefresh, consumeRefresh, revokeFamily, denyAccess, type GoogleProfile } from './store'
 import { requireAuth, type AuthVars } from '../middleware/auth'
 
 const REFRESH_COOKIE = 'refresh'
@@ -96,3 +96,19 @@ auth.get('/me', requireAuth, async (c) => {
   if (!u) return c.json({ error: 'not found' }, 404)
   return c.json({ id: String(u._id), email: u.email, name: u.name, picture: u.picture })
 })
+
+// ── dev 전용 게이트웨이 ────────────────────────────────────────────────────
+// 구글을 우회해 고정 테스트 계정으로 세션을 발급한다. 자동화 E2E용(구글은 봇
+// 로그인을 차단하므로). **운영(isProd)에선 라우트 자체를 등록하지 않는다.**
+export const DEV_TEST_ACCOUNT: GoogleProfile = {
+  sub: 'dev-test-account',
+  email: 'dev@study-anything.test',
+  name: 'Dev Tester',
+}
+if (!config.isProd) {
+  auth.post('/dev/login', async (c) => {
+    const userId = await upsertUser(DEV_TEST_ACCOUNT)
+    const out = await issueSession(c, userId, randomUUID())
+    return c.json({ ...out, user: { email: DEV_TEST_ACCOUNT.email, name: DEV_TEST_ACCOUNT.name } })
+  })
+}

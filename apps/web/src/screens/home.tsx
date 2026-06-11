@@ -3,6 +3,20 @@ import { useState } from 'react'
 import { WF, TONE } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Divider, Btn, Field, Marker, InfoDot, HealthSheet, TabBar } from '../design/kit'
 import { AppMark } from '../design/charts'
+import type { Track } from '../api'
+
+type Tab = 'home' | 'today' | 'stats' | 'settings'
+
+// examDate(ISO) → 오늘 자정 기준 남은 일수. 미래만 양수.
+function ddays(examDate: string): number {
+  const exam = new Date(examDate)
+  const now = new Date()
+  return Math.ceil((exam.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000)
+}
+function examLabel(examDate: string): string {
+  const d = new Date(examDate)
+  return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`
+}
 
 // 구글 공식 4색 "G" 로고 (브랜딩 가이드라인)
 function GoogleG({ size = 18 }: { size?: number }) {
@@ -16,8 +30,8 @@ function GoogleG({ size = 18 }: { size?: number }) {
   )
 }
 
-// 0. 로그인 (구글 단독)
-export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
+// 0. 로그인 (구글 단독). onDevLogin 제공 시 dev 전용 테스트 로그인 버튼 노출.
+export function S_Login({ onGoogle, onDevLogin }: { onGoogle?: () => void; onDevLogin?: () => void }) {
   return (
     <Screen>
       <Body style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 0, padding: 34 }}>
@@ -37,49 +51,92 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
             <GoogleG />
             Google 계정으로 계속하기
           </button>
+          {onDevLogin && (
+            <button onClick={onDevLogin} style={{
+              marginTop: 10, width: '100%', height: 38, border: `1px dashed ${WF.line}`, borderRadius: 10,
+              background: 'transparent', color: WF.ink3, fontFamily: WF.mono, fontSize: 12, cursor: 'pointer',
+            }}>dev 로그인 (테스트 계정)</button>
+          )}
         </div>
       </Body>
     </Screen>
   )
 }
 
-// 1. 트랙 목록 (홈)
-export function S_TrackList({ onOpen, onAdd, onNav }: { onOpen?: () => void; onAdd?: () => void; onNav?: (t: 'home' | 'today' | 'stats' | 'settings') => void }) {
+// 1. 트랙 목록 (홈). tracks 제공 시 실데이터(sparse — 건강·진도는 스케줄러 연결 후),
+// 미제공 시 데모 목업.
+export function S_TrackList({ tracks, onOpen, onAdd, onNav }: {
+  tracks?: Track[]; onOpen?: (t?: Track) => void; onAdd?: () => void; onNav?: (t: Tab) => void
+}) {
   return (
     <Screen>
       <TopBar title="내 학습" big action={{ label: '＋ 추가', solid: true }} onAction={onAdd} />
       <Body gap={12}>
-        <div onClick={onOpen} style={{ cursor: 'pointer' }}>
-          <Card strong>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 18, fontWeight: 700 }}>토익</span><Dday n={1} urgent />
-            </div>
-            <div style={{ margin: '10px 0 12px' }}><Chip tone="danger" strong>과부하 · 오늘 42문항</Chip></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Bar pct={60} dark /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>60%</span>
-            </div>
-          </Card>
-        </div>
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 18, fontWeight: 700 }}>오픽</span><Dday n={12} />
-          </div>
-          <div style={{ margin: '10px 0 12px' }}><Chip tone="mid">순항 · 오늘 18문항</Chip></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Bar pct={30} /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>30%</span>
-          </div>
-        </Card>
-        <div style={{ marginTop: 4 }}><Divider>시험일 미설정</Divider></div>
-        <Card style={{ borderStyle: 'dashed' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: WF.ink2 }}>물리</span>
-            <Chip tone="off">시험일 설정 필요</Chip>
-          </div>
-          <div style={{ marginTop: 9, fontSize: 13, color: WF.ink3 }}>학습 계획 생성 대기</div>
-        </Card>
+        {tracks ? <RealTrackCards tracks={tracks} onOpen={onOpen} /> : <DemoTrackCards onOpen={() => onOpen?.()} />}
       </Body>
       <TabBar active="home" onNav={onNav} />
     </Screen>
+  )
+}
+
+// 실데이터 카드 — 이름 + 시험일(D-day)/미설정. 가짜 건강·진도는 그리지 않는다.
+function RealTrackCards({ tracks, onOpen }: { tracks: Track[]; onOpen?: (t: Track) => void }) {
+  return (
+    <>
+      {tracks.map((t) => {
+        const hasExam = !!t.examDate
+        const n = hasExam ? ddays(t.examDate as string) : null
+        return (
+          <div key={t.id} onClick={() => onOpen?.(t)} style={{ cursor: 'pointer' }}>
+            <Card strong={hasExam} style={hasExam ? undefined : { borderStyle: 'dashed' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 18, fontWeight: 700, color: hasExam ? WF.ink : WF.ink2 }}>{t.title}</span>
+                {hasExam ? <Dday n={Math.max(0, n as number)} urgent={(n as number) <= 3} /> : <Chip tone="off">시험일 설정 필요</Chip>}
+              </div>
+              <div style={{ marginTop: 9, fontSize: 13, color: WF.ink3 }}>
+                {hasExam ? `시험일 ${examLabel(t.examDate as string)} · 학습 계획 준비 중` : '학습 계획 생성 대기'}
+              </div>
+            </Card>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+// 데모 목업(백엔드 없음) — 원본 와이어프레임 비주얼 보존.
+function DemoTrackCards({ onOpen }: { onOpen?: () => void }) {
+  return (
+    <>
+      <div onClick={onOpen} style={{ cursor: 'pointer' }}>
+        <Card strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 18, fontWeight: 700 }}>토익</span><Dday n={1} urgent />
+          </div>
+          <div style={{ margin: '10px 0 12px' }}><Chip tone="danger" strong>과부하 · 오늘 42문항</Chip></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Bar pct={60} dark /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>60%</span>
+          </div>
+        </Card>
+      </div>
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>오픽</span><Dday n={12} />
+        </div>
+        <div style={{ margin: '10px 0 12px' }}><Chip tone="mid">순항 · 오늘 18문항</Chip></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Bar pct={30} /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>30%</span>
+        </div>
+      </Card>
+      <div style={{ marginTop: 4 }}><Divider>시험일 미설정</Divider></div>
+      <Card style={{ borderStyle: 'dashed' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 700, color: WF.ink2 }}>물리</span>
+          <Chip tone="off">시험일 설정 필요</Chip>
+        </div>
+        <div style={{ marginTop: 9, fontSize: 13, color: WF.ink3 }}>학습 계획 생성 대기</div>
+      </Card>
+    </>
   )
 }
 
@@ -103,8 +160,47 @@ export function S_Empty({ onAdd, onNav }: { onAdd?: () => void; onNav?: (t: 'hom
   )
 }
 
-// 2. 트랙 대시보드 (과부하)
-export function S_Dashboard({ defaultInfo = false, onStart, onEdit, onBack }: { defaultInfo?: boolean; onStart?: () => void; onEdit?: () => void; onBack?: () => void }) {
+// 2. 트랙 대시보드. track 제공 시 실데이터(정직 — 가짜 건강/진도 없이 스케줄러 대기
+// 안내), 미제공 시 데모 목업.
+export function S_Dashboard({ track, defaultInfo = false, onStart, onEdit, onBack }: {
+  track?: Track; defaultInfo?: boolean; onStart?: () => void; onEdit?: () => void; onBack?: () => void
+}) {
+  if (track) return <RealDashboard track={track} onEdit={onEdit} onBack={onBack} />
+  return <DemoDashboard defaultInfo={defaultInfo} onStart={onStart} onEdit={onEdit} onBack={onBack} />
+}
+
+function RealDashboard({ track, onEdit, onBack }: { track: Track; onEdit?: () => void; onBack?: () => void }) {
+  const hasExam = !!track.examDate
+  const n = hasExam ? Math.max(0, ddays(track.examDate as string)) : null
+  return (
+    <Screen>
+      <TopBar title={track.title} back action={{ label: '수정' }} onBack={onBack} onAction={onEdit} />
+      <Body gap={16}>
+        <div style={{ textAlign: 'center', padding: '6px 0 2px' }}>
+          {hasExam ? (
+            <>
+              <div style={{ fontFamily: WF.mono, fontSize: 30, fontWeight: 700, letterSpacing: '0.5px' }}>D-{n}</div>
+              <div style={{ fontSize: 13, color: WF.ink2, marginTop: 2 }}>{examLabel(track.examDate as string)} · 시험일</div>
+            </>
+          ) : (
+            <div style={{ marginTop: 6 }}><Chip tone="off">시험일 설정 필요</Chip></div>
+          )}
+        </div>
+        <Card style={{ background: WF.fill1, borderStyle: 'dashed' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>학습 계획 준비 중</div>
+          <div style={{ fontSize: 13, color: WF.ink2, lineHeight: 1.55 }}>
+            {hasExam
+              ? '오늘의 학습·건강 상태는 스케줄러 연결 후 표시됩니다.'
+              : '시험일을 설정하면 학습 계획이 생성됩니다. ‘수정’에서 지정하세요.'}
+          </div>
+        </Card>
+        <div style={{ marginTop: 'auto', fontFamily: WF.mono, fontSize: 11, color: WF.ink3, textAlign: 'center' }}>{track.trackSlug}</div>
+      </Body>
+    </Screen>
+  )
+}
+
+function DemoDashboard({ defaultInfo = false, onStart, onEdit, onBack }: { defaultInfo?: boolean; onStart?: () => void; onEdit?: () => void; onBack?: () => void }) {
   const [info, setInfo] = useState(defaultInfo)
   return (
     <Screen>
@@ -151,15 +247,26 @@ export function S_Dashboard({ defaultInfo = false, onStart, onEdit, onBack }: { 
   )
 }
 
-// 3. 트랙 수정 (이름·시험일 + 삭제)
-export function S_Edit({ onBack, onSave, onDelete }: { onBack?: () => void; onSave?: () => void; onDelete?: () => void }) {
+// 3. 트랙 수정 (이름·시험일 + 삭제). track 제공 시 실제 값, 미제공 시 데모.
+export function S_Edit({ track, onBack, onSave, onDelete }: {
+  track?: Track; onBack?: () => void; onSave?: () => void; onDelete?: () => void
+}) {
   const [confirm, setConfirm] = useState(false)
+  const title = track?.title ?? '토익'
+  const examValue = track
+    ? (track.examDate ? examLabel(track.examDate) : '미설정')
+    : '2026 – 06 – 11'
   return (
     <Screen>
-      <TopBar title="토익 수정" back action={{ label: '저장', solid: true }} onBack={onBack} onAction={onSave} />
+      <TopBar title={`${title} 수정`} back action={{ label: '저장', solid: true }} onBack={onBack} onAction={onSave} />
       <Body gap={22} style={{ paddingTop: 22 }}>
-        <Field label="트랙 이름" value="토익" />
-        <Field label="시험일 (deadline)" value="2026 – 06 – 11" icon="📅" />
+        <Field label="트랙 이름" value={title} />
+        <Field label="시험일 (deadline)" value={examValue} icon="📅" />
+        {track && (
+          <div style={{ fontSize: 12, color: WF.ink3, lineHeight: 1.5 }}>
+            시험일 변경은 트랙 추가 후 ‘시험일 설정’ 화면에서 재지정합니다(곧 이 화면에서도 지원).
+          </div>
+        )}
 
         {/* 위험 구역 — 삭제 */}
         <div style={{ marginTop: 'auto' }}>
@@ -174,13 +281,20 @@ export function S_Edit({ onBack, onSave, onDelete }: { onBack?: () => void; onSa
           </div>
         </div>
       </Body>
-      {confirm && <DeleteSheet name="토익" onClose={() => setConfirm(false)} onConfirm={onDelete} />}
+      {confirm && (
+        <DeleteSheet
+          name={title}
+          detail={track ? '덱·개념·카드·모든 학습 이력' : '덱 3 · 문항 128 · 통계 전체'}
+          onClose={() => setConfirm(false)}
+          onConfirm={onDelete}
+        />
+      )}
     </Screen>
   )
 }
 
 // 트랙 삭제 확인 시트
-function DeleteSheet({ name, onClose, onConfirm }: { name: string; onClose?: () => void; onConfirm?: () => void }) {
+function DeleteSheet({ name, detail, onClose, onConfirm }: { name: string; detail: string; onClose?: () => void; onConfirm?: () => void }) {
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(30,28,24,0.32)', display: 'flex', alignItems: 'flex-end', zIndex: 20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: WF.paper, width: '100%', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: '16px 22px calc(env(safe-area-inset-bottom) + 26px)', boxShadow: '0 -8px 30px rgba(0,0,0,0.12)' }}>
@@ -193,7 +307,7 @@ function DeleteSheet({ name, onClose, onConfirm }: { name: string; onClose?: () 
           덱·문항과 <b>모든 학습 이력·진척</b>이 영구 삭제됩니다. 되돌릴 수 없어요.
         </div>
         <div style={{ background: WF.fill1, border: `1px solid ${WF.lineSoft}`, borderRadius: 10, padding: '11px 13px', marginBottom: 18, fontFamily: WF.mono, fontSize: 11.5, color: WF.ink2 }}>
-          삭제 대상: 덱 3 · 문항 128 · 통계 전체
+          삭제 대상: {detail}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}><Btn ghost onClick={onClose}>취소</Btn></div>

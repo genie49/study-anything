@@ -39,6 +39,20 @@ async function bearer(userId: string): Promise<string> {
   return `Bearer ${token}`
 }
 
+describe('GET /tracks', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks')).status).toBe(401)
+  })
+
+  it('내 트랙 목록 반환', async () => {
+    await importBundle(USER, bundle())
+    const res = await app.request('/tracks', { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const json = await res.json() as { ok: boolean; tracks: { trackSlug: string }[] }
+    expect(json.tracks.some((t) => t.trackSlug === '토익')).toBe(true)
+  })
+})
+
 describe('PATCH /tracks/:id', () => {
   it('인증 없으면 401', async () => {
     const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })
