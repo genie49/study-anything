@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
-import { hasBackend, hasSessionHint, login, tryRefresh, logout } from './auth'
+import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
 import { getTracks, importZip, patchTrack, deleteTrack, type ImportSummary, type Track } from './api'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
@@ -60,10 +60,13 @@ export default function App() {
   if (!authed) {
     return (
       <Stage>
-        <S_Login onGoogle={() => {
-          if (hasBackend) login()       // → 백엔드 구글 OAuth로 리다이렉트
-          else setAuthed(true)          // 데모: 백엔드 없을 때 바로 진입
-        }} />
+        <S_Login
+          onGoogle={() => {
+            if (hasBackend) login()       // → 백엔드 구글 OAuth로 리다이렉트
+            else setAuthed(true)          // 데모: 백엔드 없을 때 바로 진입
+          }}
+          onDevLogin={hasBackend && devLoginEnabled ? () => { void devLogin().then(setAuthed) } : undefined}
+        />
       </Stage>
     )
   }

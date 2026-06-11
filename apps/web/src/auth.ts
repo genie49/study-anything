@@ -17,6 +17,22 @@ export function login() {
   window.location.href = `${API}/auth/google`
 }
 
+// dev 전용 — 구글 우회 테스트 로그인. VITE_DEV_LOGIN일 때만 노출(아래 플래그).
+// 백엔드도 비프로덕션에서만 /auth/dev/login을 등록하므로 운영에선 동작 안 함.
+export const devLoginEnabled = !!import.meta.env.VITE_DEV_LOGIN
+export async function devLogin(): Promise<boolean> {
+  if (!API) return false
+  try {
+    const res = await fetch(`${API}/auth/dev/login`, { method: 'POST', credentials: 'include' })
+    if (!res.ok) return false
+    const data = (await res.json()) as { accessToken?: string }
+    accessToken = data.accessToken ?? null
+    return !!accessToken
+  } catch {
+    return false
+  }
+}
+
 // 앱 로드/401 시 refresh 쿠키로 access 침묵 재발급. 성공 시 true.
 export async function tryRefresh(): Promise<boolean> {
   if (!API) return false

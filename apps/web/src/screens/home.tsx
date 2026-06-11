@@ -30,8 +30,8 @@ function GoogleG({ size = 18 }: { size?: number }) {
   )
 }
 
-// 0. 로그인 (구글 단독)
-export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
+// 0. 로그인 (구글 단독). onDevLogin 제공 시 dev 전용 테스트 로그인 버튼 노출.
+export function S_Login({ onGoogle, onDevLogin }: { onGoogle?: () => void; onDevLogin?: () => void }) {
   return (
     <Screen>
       <Body style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 0, padding: 34 }}>
@@ -51,6 +51,12 @@ export function S_Login({ onGoogle }: { onGoogle?: () => void }) {
             <GoogleG />
             Google 계정으로 계속하기
           </button>
+          {onDevLogin && (
+            <button onClick={onDevLogin} style={{
+              marginTop: 10, width: '100%', height: 38, border: `1px dashed ${WF.line}`, borderRadius: 10,
+              background: 'transparent', color: WF.ink3, fontFamily: WF.mono, fontSize: 12, cursor: 'pointer',
+            }}>dev 로그인 (테스트 계정)</button>
+          )}
         </div>
       </Body>
     </Screen>

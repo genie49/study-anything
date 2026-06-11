@@ -112,6 +112,18 @@ authMiddleware(c, next):
 
 > 코드 경계까지(콜백→세션→refresh 회전→재사용 탐지)는 Google만 모킹한 E2E 테스트(`auth/flow.test.ts`)로 이미 검증됨. 위 단계는 그 경계 너머의 실제 구글 토큰 교환만 켜는 작업.
 
+## dev 전용 게이트웨이 (자동화 E2E)
+
+구글은 봇 로그인을 차단하므로, 자동화 테스트는 **구글을 우회하는 dev 전용 엔드포인트**로 인증한다.
+
+| 메서드·경로 | 가용 조건 | 동작 |
+|---|---|---|
+| `POST /auth/dev/login` | **`NODE_ENV !== production`일 때만 라우트 등록** | 고정 **테스트 계정**(`dev@study-anything.test`, googleSub `dev-test-account`) upsert → 정상 세션(access + refresh 쿠키) 발급. 응답에 `accessToken` + `user` |
+
+- **운영에선 라우트 자체가 존재하지 않는다**(`config.isProd` 분기로 미등록 → 404). 토큰 발급 경로는 평소와 동일(`issueSession`)이라 별도 우회 경로가 생기지 않음.
+- 프론트: `VITE_DEV_LOGIN`이 설정된 빌드에서만 로그인 화면에 "dev 로그인" 버튼 노출(`auth.ts devLogin()` → 응답의 access를 메모리 보관). 운영 빌드엔 플래그 미설정.
+- 용도: 로컬 풀스택(api+web+Mongo+Redis)에서 **업로드→examDate→삭제 루프를 Playwright로 자동 검증**. 라이브로 통과 확인됨.
+
 ## 환경변수 (`.env`, 서버 전용)
 
 | 변수 | 용도 |
