@@ -5,7 +5,7 @@ const getAccessToken = vi.fn<() => string | null>(() => 'tok-1')
 const tryRefresh = vi.fn<() => Promise<boolean>>(async () => false)
 vi.mock('./auth', () => ({ getAccessToken: () => getAccessToken(), tryRefresh: () => tryRefresh() }))
 
-import { getTracks, importZip, patchTrack, deleteTrack } from './api'
+import { getTracks, getSession, importZip, patchTrack, deleteTrack } from './api'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -66,6 +66,15 @@ describe('importZip', () => {
     expect(init?.method).toBe('POST')
     expect(init?.body).toBeInstanceOf(FormData)
     expect((init?.body as FormData).get('file')).toBeInstanceOf(File)
+  })
+})
+
+describe('getSession', () => {
+  it('세션 큐 반환', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, session: { trackId: 't1', total: 1, items: [{ cardId: 'c1', prompt: 'q' }] } }))
+    const s = await getSession('t1')
+    expect(s.total).toBe(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/tracks/t1/session')
   })
 })
 

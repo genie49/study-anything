@@ -1,6 +1,7 @@
 // 풀스크린 학습 세션 — screens-session.jsx 이식.
 import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, Body, Card, Chip, Bar, Btn, Marker } from '../design/kit'
+import type { SessionItem } from '../api'
 
 function SessHead({ done, total, right, onClose }: { done: number; total: number; right?: string; onClose?: () => void }) {
   return (
@@ -34,18 +35,26 @@ export function S_Pretest({ onClose }: { onClose?: () => void }) {
 }
 
 // 4. 개념 + 자기설명 게이트
-export function S_Concept({ stage = 'input', onClose, onNext }: { stage?: 'input' | 'insufficient' | 'ok'; onClose?: () => void; onNext?: () => void }) {
+function plainMd(s: string): string {
+  return s.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim()
+}
+
+export function S_Concept({ item, done = 0, total = 42, stage = 'input', onClose, onNext }: {
+  item?: SessionItem; done?: number; total?: number; stage?: 'input' | 'insufficient' | 'ok'; onClose?: () => void; onNext?: () => void
+}) {
   const ok = stage === 'ok'
   const low = stage === 'insufficient'
   const filled = ok || low
+  const conceptTitle = item?.conceptTitle ?? '현재완료 vs 과거시제'
+  const conceptBody = item ? plainMd(item.conceptBodyMd) : '현재완료는 과거의 사건이 지금에 영향을 줄 때. 과거시제는 현재와 단절된 한 시점.'
   return (
     <Screen>
-      <SessHead done={20} total={42} onClose={onClose} />
+      <SessHead done={done} total={total} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
-        <Chip tone="neutral">개념 · 토익</Chip>
-        <div style={{ fontSize: 23, fontWeight: 700, marginTop: 16, lineHeight: 1.3 }}>현재완료 vs 과거시제</div>
+        <Chip tone="neutral">개념</Chip>
+        <div style={{ fontSize: 23, fontWeight: 700, marginTop: 16, lineHeight: 1.3 }}>{conceptTitle}</div>
         <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.65, color: WF.ink }}>
-          <b>핵심.</b> 현재완료는 과거의 사건이 <u>지금</u>에 영향을 줄 때. 과거시제는 현재와 <u>단절</u>된 한 시점.
+          <b>핵심.</b> {conceptBody}
         </div>
         <Card style={{ marginTop: 18, background: WF.fill1 }}>
           <div style={{ fontFamily: WF.mono, fontSize: 10.5, color: WF.ink3, marginBottom: 9, letterSpacing: '0.4px' }}>혼동쌍 · confusableWith</div>
@@ -97,19 +106,23 @@ export function S_Concept({ stage = 'input', onClose, onNext }: { stage?: 'input
 }
 
 // 5. 다지기 (입력형)
-export function S_Quiz({ onClose, onSubmit }: { onClose?: () => void; onSubmit?: () => void }) {
+export function S_Quiz({ item, done = 24, total = 42, onClose, onSubmit }: {
+  item?: SessionItem; done?: number; total?: number; onClose?: () => void; onSubmit?: () => void
+}) {
   return (
     <Screen>
-      <SessHead done={24} total={42} onClose={onClose} />
+      <SessHead done={done} total={total} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
-        <Chip tone="neutral">다지기 · 현재완료</Chip>
+        <Chip tone="neutral">다지기 · {item?.conceptTitle ?? '현재완료'}</Chip>
         <div style={{ fontSize: 22, fontWeight: 600, marginTop: 26, lineHeight: 1.5 }}>
-          He <span style={{ borderBottom: `2px solid ${WF.ink}`, padding: '0 26px' }}>&nbsp;</span> (live) here since 2010.
+          {item?.prompt ?? <>He <span style={{ borderBottom: `2px solid ${WF.ink}`, padding: '0 26px' }}>&nbsp;</span> (live) here since 2010.</>}
         </div>
-        <div style={{ marginTop: 30, border: `1px solid ${WF.lineStrong}`, borderRadius: 12, padding: '15px 14px', fontSize: 16, fontWeight: 500 }}>has lived</div>
+        <div style={{ marginTop: 30, border: `1px solid ${WF.lineStrong}`, borderRadius: 12, padding: '15px 14px', fontSize: 16, fontWeight: 500, color: item ? WF.ink3 : WF.ink }}>
+          {item ? '답 입력…' : 'has lived'}
+        </div>
         <div style={{ marginTop: 14 }}><Btn primary onClick={onSubmit}>제출</Btn></div>
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
-          <span style={{ fontSize: 14 }}>💡</span><span>힌트 보기</span>
+          <span style={{ fontSize: 14 }}>💡</span><span>{item?.hint ?? '힌트 보기'}</span>
         </div>
       </Body>
     </Screen>
