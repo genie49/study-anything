@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
 import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
-import { getTracks, importZip, patchTrack, deleteTrack, type ImportSummary, type Track } from './api'
+import { getTracks, getSession, importZip, patchTrack, deleteTrack, type ImportSummary, type SessionQueue, type Track } from './api'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
@@ -41,6 +41,7 @@ export default function App() {
   const [tracks, setTracks] = useState<Track[] | null>(null)
   const [selected, setSelected] = useState<Track | null>(null)                       // 대시보드/수정 대상
   const [examTrack, setExamTrack] = useState<{ id: string; title: string } | null>(null) // 업로드 후 시험일 설정 대상
+  const [session, setSession] = useState<SessionQueue | null>(null)
 
   const refreshTracks = useCallback(async () => {
     if (!hasBackend) return
@@ -74,6 +75,14 @@ export default function App() {
   const nav = (t: Tab) => setScreen(t)
   const doLogout = () => { void logout().then(() => { setAuthed(false); setTracks(null); setSelected(null) }) }
   const openTrack = (t?: Track) => { setSelected(t ?? null); setScreen('dashboard') }
+  const startSession = async () => {
+    if (hasBackend && selected) {
+      const q = await getSession(selected.id)
+      setSession(q)
+      if (q.items.length === 0) { setScreen('dashboard'); return }
+    }
+    setScreen('concept')
+  }
 
   // 홈: 백엔드 모드는 실데이터(빈 목록→S_Empty, 로딩→스피너), 데모 모드는 목업.
   const homeView = () => {
@@ -117,14 +126,14 @@ export default function App() {
       case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
       case 'stats': return <S_Stats onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
-      case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => setScreen('concept')} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
+      case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => { void startSession() }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
       case 'edit': return <S_Edit track={hasBackend ? selected ?? undefined : undefined} onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={onDeleteTrack} />
       // 트랙 추가: zip 업로드 → 완료 → 시험일 설정 → (백엔드)홈 / (데모)대시보드
       case 'upload': return <S_Upload upload={hasBackend ? importZip : undefined} onBack={() => setScreen('home')} onDone={onUploaded} />
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} onSave={onExamSave} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
-      case 'concept': return <S_Concept stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
-      case 'quiz': return <S_Quiz onClose={() => setScreen('dashboard')} onSubmit={() => setScreen('grade')} />
+      case 'concept': return <S_Concept item={session?.items[0]} done={0} total={session?.total ?? 42} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
+      case 'quiz': return <S_Quiz item={session?.items[0]} done={0} total={session?.total ?? 42} onClose={() => setScreen('dashboard')} onSubmit={() => setScreen('grade')} />
       case 'grade': return <S_Grade result="partial" onClose={() => setScreen('dashboard')} onNext={() => setScreen('summary')} />
       case 'summary': return <S_Summary onDone={() => setScreen('dashboard')} />
       default: return homeView()

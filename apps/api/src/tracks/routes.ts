@@ -6,6 +6,7 @@ import { validateBundle, importBundle, type SoulBundle } from './import'
 import { bundleFromZip } from './unzip'
 import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPatch } from './manage'
 import { getTrackPlan } from './plan'
+import { getSessionQueue } from './session'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
 
@@ -20,6 +21,13 @@ tracks.get('/:id/plan', requireAuth, async (c) => {
   const plan = await getTrackPlan(c.get('userId'), c.req.param('id') ?? '')
   if (!plan) return c.json({ error: 'track not found' }, 404)
   return c.json({ ok: true, plan })
+})
+
+// 오늘 학습 세션 큐 — 실제 카드/개념 콘텐츠를 반환. 상태 갱신은 제출 API에서 처리한다.
+tracks.get('/:id/session', requireAuth, async (c) => {
+  const queue = await getSessionQueue(c.get('userId'), c.req.param('id') ?? '')
+  if (!queue) return c.json({ error: 'track not found' }, 404)
+  return c.json({ ok: true, session: queue })
 })
 
 // 업로드된 zip(멀티파트 'file' 또는 raw 바디)을 풀어 bundle로. 실패 시 에러 문자열 배열.

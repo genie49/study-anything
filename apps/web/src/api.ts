@@ -13,6 +13,12 @@ export type TrackPlan = {
   todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
   backlog: number; newRemaining: number; feasible: boolean
 }
+export type SessionItem = {
+  stateId: string; cardId: string; mode: 'new' | 'review'; type: string
+  prompt: string; answer: string; explanation: string; hint: string | null; distractors: string[]
+  conceptTitle: string; conceptBodyMd: string
+}
+export type SessionQueue = { trackId: string; total: number; items: SessionItem[] }
 
 async function authedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers)
@@ -44,6 +50,13 @@ export async function getPlan(id: string): Promise<TrackPlan> {
   const res = await authedFetch(`/tracks/${id}/plan`)
   if (!res.ok) throw new Error(`플랜 조회 실패 (${await errorMessage(res)})`)
   return (await res.json() as { plan: TrackPlan }).plan
+}
+
+// GET /tracks/:id/session — 오늘 학습할 실제 카드/개념 큐.
+export async function getSession(id: string): Promise<SessionQueue> {
+  const res = await authedFetch(`/tracks/${id}/session`)
+  if (!res.ok) throw new Error(`세션 생성 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { session: SessionQueue }).session
 }
 
 // POST /tracks/import — .soul.zip 멀티파트 업로드(브라우저가 boundary 설정 → content-type 수동 지정 금지).

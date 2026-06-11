@@ -72,6 +72,29 @@ describe('GET /tracks/:id/plan', () => {
   })
 })
 
+describe('GET /tracks/:id/session', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks/abc/session')).status).toBe(401)
+  })
+  it('없는/타인 트랙이면 404', async () => {
+    const res = await app.request('/tracks/64b64c1f01bcbad5f9f99999/session', { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(404)
+  })
+  it('오늘 큐에 실제 카드와 개념 본문을 반환', async () => {
+    const b = bundle()
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const res = await app.request(`/tracks/${trackId}/session`, { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const { session } = await res.json() as { session: { total: number; items: { mode: string; prompt: string; conceptTitle: string; conceptBodyMd: string }[] } }
+    expect(session.total).toBe(1)
+    expect(session.items[0].mode).toBe('new')
+    expect(session.items[0].prompt).toBe('q')
+    expect(session.items[0].conceptTitle).toBe('T')
+    expect(session.items[0].conceptBodyMd).toBe('#')
+  })
+})
+
 describe('PATCH /tracks/:id', () => {
   it('인증 없으면 401', async () => {
     const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })
