@@ -230,7 +230,7 @@ export default function App() {
     switch (screen) {
       case 'home': return homeView()
       case 'today': return <S_Today today={todaySummary} onStart={(t) => { void startSession(t) }} onOpen={openTrack} onNav={nav} />
-      case 'stats': return <S_Stats onNav={nav} />
+      case 'stats': return <S_Stats tracks={hasBackend ? (tracks ?? []) : undefined} onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
       case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => { void startSession() }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
       case 'edit': return <S_Edit track={hasBackend ? selected ?? undefined : undefined} onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={onDeleteTrack} />
