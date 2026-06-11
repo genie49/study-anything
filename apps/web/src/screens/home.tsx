@@ -6,7 +6,7 @@ import { AppMark } from '../design/charts'
 import { getPlan, type Track, type TrackPlan, type HealthState } from '../api'
 
 // 건강상태 → 배너 표시(톤·문구).
-const HEALTH_DISPLAY: Record<HealthState, { tone: Tone; title: string; body: string }> = {
+export const HEALTH_DISPLAY: Record<HealthState, { tone: Tone; title: string; body: string }> = {
   no_exam:         { tone: 'off',    title: '시험일 미설정', body: '시험일을 설정하면 학습 계획이 생성됩니다. ‘수정’에서 지정하세요.' },
   on_track:        { tone: 'mid',    title: '순항',         body: '오늘 분량을 진행하세요.' },
   behind_overload: { tone: 'danger', title: '과부하',       body: '밀린 분량이 쌓였어요. 핵심부터 좁혀 자동으로 진행합니다.' },

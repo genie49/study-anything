@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { WF } from './design/tokens'
 import { hasBackend, hasSessionHint, login, tryRefresh, logout, devLogin, devLoginEnabled } from './auth'
-import { getTracks, getSession, importZip, patchTrack, deleteTrack, submitAnswer, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
+import { getTracks, getPlan, getSession, importZip, patchTrack, deleteTrack, submitAnswer, type AnswerResult, type ImportSummary, type SessionItem, type SessionQueue, type Track } from './api'
+import { summarizeToday, type TodayRow, type TodaySummary } from './today'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
@@ -48,6 +49,7 @@ export default function App() {
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
   const [submitPending, setSubmitPending] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [todayRows, setTodayRows] = useState<TodayRow[] | null>(null) // 오늘 탭: 트랙별 플랜 합산용
 
   const refreshTracks = useCallback(async () => {
     if (!hasBackend) return
@@ -63,6 +65,17 @@ export default function App() {
   useEffect(() => {
     if (authed && hasBackend) { void refreshTracks() }
   }, [authed, refreshTracks])
+
+  // 오늘 탭 진입 시 트랙별 플랜을 병렬 fetch(소수 트랙이라 배치 엔드포인트 불필요).
+  useEffect(() => {
+    if (!hasBackend || screen !== 'today' || !tracks) return
+    let cancelled = false
+    setTodayRows(null)
+    Promise.all(tracks.map(async (t) => ({ track: t, plan: await getPlan(t.id) })))
+      .then((rows) => { if (!cancelled) setTodayRows(rows) })
+      .catch(() => { if (!cancelled) setTodayRows([]) })
+    return () => { cancelled = true }
+  }, [screen, tracks])
 
   if (!authed) {
     return (
@@ -81,9 +94,11 @@ export default function App() {
   const nav = (t: Tab) => setScreen(t)
   const doLogout = () => { void logout().then(() => { setAuthed(false); setTracks(null); setSelected(null) }) }
   const openTrack = (t?: Track) => { setSelected(t ?? null); setScreen('dashboard') }
-  const startSession = async () => {
-    if (hasBackend && selected) {
-      const q = await getSession(selected.id)
+  const startSession = async (track?: Track) => {
+    const t = track ?? selected // 오늘 탭에서 넘어온 트랙 우선(미지정이면 현재 선택).
+    if (hasBackend && t) {
+      setSelected(t) // 세션 후 대시보드 복귀가 올바른 트랙을 가리키도록.
+      const q = await getSession(t.id)
       setSession(q)
       setSessionIndex(0)
       setSessionResults([])
@@ -208,9 +223,13 @@ export default function App() {
     const totalItems = session?.items.length ?? 42
     const done = hasBackend ? sessionResults.length : 0
     const hasAgainReview = againReviewItems().length > 0
+    // 오늘 탭: 백엔드면 트랙별 플랜 합산(로딩 중 null), 데모면 undefined→목업.
+    const todaySummary: TodaySummary | null | undefined = hasBackend
+      ? (todayRows ? summarizeToday(todayRows) : null)
+      : undefined
     switch (screen) {
       case 'home': return homeView()
-      case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
+      case 'today': return <S_Today today={todaySummary} onStart={(t) => { void startSession(t) }} onOpen={openTrack} onNav={nav} />
       case 'stats': return <S_Stats onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
       case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => { void startSession() }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
