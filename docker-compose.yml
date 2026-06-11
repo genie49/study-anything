@@ -27,11 +27,8 @@ services:
     environment:        # 컨테이너 내부 주소는 .env값 위에 덮어씀(우선순위 높음)
       - PORT=8787
       - MONGO_URL=mongodb://mongo:27017/study
-      - REDIS_URL=redis://redis:6379
     depends_on:
       mongo:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   mongo:
@@ -46,18 +43,5 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   mongo-data:
-  redis-data:
