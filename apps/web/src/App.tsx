@@ -42,6 +42,7 @@ export default function App() {
   const [tracks, setTracks] = useState<Track[] | null>(null)
   const [selected, setSelected] = useState<Track | null>(null)                       // 대시보드/수정 대상
   const [examTrack, setExamTrack] = useState<{ id: string; title: string } | null>(null) // 업로드 후 시험일 설정 대상
+  const [editingExam, setEditingExam] = useState(false) // 트랙 수정에서 시험일 재지정 진입(완료 후 대시보드 복귀)
   const [session, setSession] = useState<SessionQueue | null>(null)
   const [sessionIndex, setSessionIndex] = useState(0)
   const [sessionResults, setSessionResults] = useState<AnswerResult[]>([])
@@ -196,17 +197,27 @@ export default function App() {
     setScreen('examdate')
   }
 
-  // 시험일 저장 → 백엔드면 PATCH 후 목록 갱신하고 홈, 데모면 대시보드.
+  // 시험일 저장 → 백엔드면 PATCH 후 갱신. 수정 진입이면 대시보드(갱신된 트랙), 업로드면 홈.
   const onExamSave = async (iso: string) => {
     if (hasBackend && examTrack) {
-      await patchTrack(examTrack.id, { examDate: iso })
+      const updated = await patchTrack(examTrack.id, { examDate: iso })
       await refreshTracks()
       setExamTrack(null)
-      setScreen('home')
+      if (editingExam) { setEditingExam(false); setSelected(updated); setScreen('dashboard') }
+      else { setScreen('home') }
     } else {
       setScreen('dashboard')
     }
   }
+
+  // 트랙 수정에서 시험일 재지정 진입.
+  const onEditExam = () => {
+    if (!selected) return
+    setExamTrack({ id: selected.id, title: selected.title })
+    setEditingExam(true)
+    setScreen('examdate')
+  }
+  const onExamCancel = () => { setEditingExam(false); setExamTrack(null); setScreen('edit') }
 
   // 트랙 삭제 → 백엔드면 DELETE 후 갱신하고 홈.
   const onDeleteTrack = async () => {
@@ -233,10 +244,10 @@ export default function App() {
       case 'stats': return <S_Stats tracks={hasBackend ? (tracks ?? []) : undefined} onNav={nav} />
       case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
       case 'dashboard': return <S_Dashboard track={hasBackend ? selected ?? undefined : undefined} onStart={() => { void startSession() }} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
-      case 'edit': return <S_Edit track={hasBackend ? selected ?? undefined : undefined} onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={onDeleteTrack} />
+      case 'edit': return <S_Edit track={hasBackend ? selected ?? undefined : undefined} onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} onDelete={onDeleteTrack} onEditExam={hasBackend ? onEditExam : undefined} />
       // 트랙 추가: zip 업로드 → 완료 → 시험일 설정 → (백엔드)홈 / (데모)대시보드
       case 'upload': return <S_Upload upload={hasBackend ? importZip : undefined} onBack={() => setScreen('home')} onDone={onUploaded} />
-      case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} onSave={onExamSave} />
+      case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} initialISO={editingExam ? selected?.examDate ?? null : null} onSave={onExamSave} onCancel={editingExam ? onExamCancel : undefined} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
       case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
       case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
