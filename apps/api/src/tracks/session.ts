@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb'
 import { getDb } from '../db/mongo'
 import { gradeCardAnswer, type GraderMode } from '../grading/grader'
 import { computeTrackPlan } from '../scheduler/plan'
+import { interleaveSession } from '../scheduler/session-order'
 import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '../scheduler/memory'
 
 export type SessionItem = {
@@ -78,11 +79,12 @@ export async function getSessionQueue(userId: string, trackId: string, now = new
   const concepts = await db.collection('concepts').find({ _id: { $in: conceptIds }, userId, trackId: _id }).toArray()
   const conceptById = new Map(concepts.map((c) => [String(c._id), c]))
 
-  const items = picked.flatMap((s): SessionItem[] => {
+  // picked는 우선순위순(연체 복습 dueAt↑ → 신규). 개념/유형을 함께 들고 인터리빙(§7.4).
+  const enriched = picked.flatMap((s) => {
     const card = cardById.get(String(s.cardId))
     if (!card) return []
     const concept = conceptById.get(String(card.conceptId))
-    return [{
+    const item: SessionItem = {
       stateId: String(s._id),
       cardId: String(card._id),
       mode: isNewState(s) ? 'new' : 'review',
@@ -94,8 +96,10 @@ export async function getSessionQueue(userId: string, trackId: string, now = new
       distractors: (card.distractors as string[] | undefined) ?? [],
       conceptTitle: (concept?.title as string | undefined) ?? '개념',
       conceptBodyMd: (concept?.bodyMd as string | undefined) ?? '',
-    }]
+    }
+    return [{ conceptId: String(card.conceptId ?? ''), type: item.type, item }]
   })
+  const items = interleaveSession(enriched).map((e) => e.item)
 
   return { trackId, total: items.length, items }
 }
