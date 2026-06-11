@@ -4,7 +4,7 @@ import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Btn, Marker, TabBar } from '../design/kit'
 import { RetentionChart, HealthTrend } from '../design/charts'
 import { HEALTH_DISPLAY } from './home'
-import { getStats, type Track, type TrackStats } from '../api'
+import { getStats, getSnapshots, type Track, type TrackStats, type Snapshot } from '../api'
 import type { TodaySummary } from '../today'
 
 type TabName = 'home' | 'today' | 'stats' | 'settings'
@@ -139,11 +139,14 @@ const GRADE_LABEL: { key: keyof TrackStats['byGrade']; label: string; tone: Tone
 function RealStats({ tracks, onNav }: { tracks: Track[]; onNav?: (t: TabName) => void }) {
   const [activeId, setActiveId] = useState<string | null>(tracks[0]?.id ?? null)
   const [stats, setStats] = useState<TrackStats | null>(null)
+  const [snaps, setSnaps] = useState<Snapshot[] | null>(null)
 
   useEffect(() => {
     if (!activeId) return
     setStats(null)
+    setSnaps(null)
     void getStats(activeId).then(setStats).catch(() => setStats(null))
+    void getSnapshots(activeId).then(setSnaps).catch(() => setSnaps(null))
   }, [activeId])
 
   const maxDay = stats ? Math.max(1, ...stats.last7.map((d) => d.count)) : 1
@@ -223,6 +226,18 @@ function RealStats({ tracks, onNav }: { tracks: Track[]; onNav?: (t: TabName) =>
                     ))}
                   </div>
                 </div>
+
+                {/* 보유율 곡선 — 학습한 카드의 R(시험일) 추이. 앱 연 날만, 보간 없음 */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>보유율 곡선 <span style={{ color: WF.ink3, fontWeight: 400, fontFamily: WF.mono, fontSize: 11 }}>R(시험일) 추이</span></div>
+                  {snaps === null ? <ChartSkeleton /> : <RetentionCurveReal snaps={snaps} />}
+                </div>
+
+                {/* 건강 추이 — 일별 건강 상태(색). 앱 연 날만 */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>건강 추이 <span style={{ color: WF.ink3, fontWeight: 400, fontFamily: WF.mono, fontSize: 11 }}>health</span></div>
+                  {snaps === null ? <ChartSkeleton /> : <HealthTrendReal snaps={snaps} />}
+                </div>
               </>
             )}
           </>
@@ -239,6 +254,64 @@ function StatTile({ label, value, unit }: { label: string; value: string; unit: 
       <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink2, marginBottom: 8 }}>{label}</div>
       <div><span style={{ fontSize: 24, fontWeight: 700 }}>{value}</span><span style={{ fontSize: 13, color: WF.ink2, marginLeft: 3 }}>{unit}</span></div>
     </Card>
+  )
+}
+
+function ChartSkeleton() {
+  return <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, padding: '10px 0' }}>불러오는 중…</div>
+}
+function ChartEmpty({ label }: { label: string }) {
+  return (
+    <div style={{ border: `1px dashed ${WF.line}`, borderRadius: 10, padding: '18px 14px', textAlign: 'center', fontSize: 12.5, color: WF.ink3, lineHeight: 1.5 }}>{label}</div>
+  )
+}
+
+// 보유율 곡선 — avgRExam 시계열. 점이 있는 날만(앱 연 날), 결측은 선으로 잇지 않음(정직).
+function RetentionCurveReal({ snaps }: { snaps: Snapshot[] }) {
+  const pts = snaps.filter((s): s is Snapshot & { avgRExam: number } => s.avgRExam !== null)
+  if (pts.length < 2) return <ChartEmpty label="보유율 추이는 학습 기록이 2일 이상 쌓이면 표시돼요." />
+  const W = 320, H = 116, padL = 8, padR = 8, top = 12, bot = 96
+  const target = 0.9
+  const yOf = (r: number) => bot - r * (bot - top)
+  const xOf = (i: number) => padL + (i / (pts.length - 1)) * (W - padL - padR)
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)} ${yOf(p.avgRExam).toFixed(1)}`).join(' ')
+  const targetY = yOf(target)
+  return (
+    <div style={{ border: `1px solid ${WF.lineSoft}`, borderRadius: 10, padding: '12px 12px 8px', background: WF.paper }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={116} preserveAspectRatio="none" style={{ display: 'block' }}>
+        {[top, yOf(0.5), bot].map((y) => <line key={y} x1={padL} y1={y} x2={W - padR} y2={y} stroke={WF.lineSoft} strokeWidth="1" />)}
+        <line x1={padL} y1={targetY} x2={W - padR} y2={targetY} stroke={TONE.ok.c} strokeWidth="1.5" strokeDasharray="4 4" />
+        <path d={line} fill="none" stroke={WF.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((p, i) => <circle key={i} cx={xOf(i)} cy={yOf(p.avgRExam)} r="3" fill={WF.paper} stroke={WF.ink} strokeWidth="2" />)}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontFamily: WF.mono, fontSize: 9.5, color: WF.ink3 }}>{pts[0].day.slice(5)}</span>
+        <span style={{ fontFamily: WF.mono, fontSize: 9.5, color: TONE.ok.c }}>목표 {Math.round(target * 100)}%</span>
+        <span style={{ fontFamily: WF.mono, fontSize: 9.5, color: WF.ink3 }}>{pts[pts.length - 1].day.slice(5)}</span>
+      </div>
+    </div>
+  )
+}
+
+// 건강 추이 — 최근 스냅샷 날들의 건강 상태(색 막대). 결측일은 비움.
+function HealthTrendReal({ snaps }: { snaps: Snapshot[] }) {
+  const recent = snaps.slice(-7)
+  if (recent.length === 0) return <ChartEmpty label="건강 추이는 학습을 시작하면 쌓여요." />
+  return (
+    <div style={{ border: `1px solid ${WF.lineSoft}`, borderRadius: 10, padding: '12px 12px 8px', background: WF.paper }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 56 }}>
+        {recent.map((s) => {
+          const hd = HEALTH_DISPLAY[s.health]
+          return (
+            <div key={s.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+              <div title={hd.title} style={{ width: '100%', height: 40, background: TONE[hd.tone].c, borderRadius: 3, opacity: 0.85 }} />
+              <span style={{ fontFamily: WF.mono, fontSize: 8.5, color: WF.ink3 }}>{s.day.slice(5)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ marginTop: 8, fontFamily: WF.mono, fontSize: 10, color: WF.ink3 }}>최근 {recent.length}일 · {HEALTH_DISPLAY[recent[recent.length - 1].health].title}</div>
+    </div>
   )
 }
 

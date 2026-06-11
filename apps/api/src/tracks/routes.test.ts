@@ -95,6 +95,37 @@ describe('GET /tracks/:id/session', () => {
   })
 })
 
+describe('GET /tracks/:id/snapshots (플랜 조회 시 일별 기록)', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks/abc/snapshots')).status).toBe(401)
+  })
+  it('없는 트랙 → 404', async () => {
+    const res = await app.request('/tracks/64b2f0000000000000000000/snapshots', { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(404)
+  })
+  it('플랜 조회가 오늘 스냅샷을 upsert(같은 날 중복=1건)', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '스냅'
+    b.manifest.title = '스냅'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    const s0 = await app.request(`/tracks/${trackId}/snapshots`, { headers: auth })
+    expect((await s0.json() as { snapshots: unknown[] }).snapshots).toHaveLength(0)
+
+    await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    await app.request(`/tracks/${trackId}/plan`, { headers: auth }) // 같은 날 → 1건 유지
+
+    const s1 = await app.request(`/tracks/${trackId}/snapshots`, { headers: auth })
+    const { snapshots } = await s1.json() as { snapshots: { day: string; health: string; total: number }[] }
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0].total).toBe(1)
+    expect(typeof snapshots[0].health).toBe('string')
+    expect(snapshots[0].day).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
 describe('GET /tracks/:id/stats', () => {
   it('인증 없으면 401', async () => {
     expect((await app.request('/tracks/abc/stats')).status).toBe(401)

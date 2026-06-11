@@ -2,6 +2,7 @@
 import { ObjectId } from 'mongodb'
 import { getDb } from '../db/mongo'
 import { computeTrackPlan, type TrackPlan, type CardStateLike } from '../scheduler/plan'
+import { avgRExam, recordSnapshot } from './snapshots'
 
 export async function getTrackPlan(userId: string, trackId: string, now = new Date()): Promise<TrackPlan | null> {
   if (!ObjectId.isValid(trackId)) return null
@@ -22,9 +23,20 @@ export async function getTrackPlan(userId: string, trackId: string, now = new Da
     archived: false,
   }))
 
-  return computeTrackPlan(states, {
+  const examDate = (track.examDate as Date | null) ?? null
+  const plan = computeTrackPlan(states, {
     now,
-    examDate: (track.examDate as Date | null) ?? null,
+    examDate,
     capacityPerDay: (track.dailyCapacity as number | undefined) ?? undefined,
   })
+
+  // 일별 스냅샷 lazy upsert(차트용 시계열). 스냅샷 실패가 플랜 응답을 막지 않게 격리.
+  try {
+    await recordSnapshot(userId, _id, {
+      health: plan.health, avgRExam: avgRExam(states, now, examDate),
+      mastered: plan.mastered, total: plan.total, backlog: plan.backlog,
+    }, now)
+  } catch { /* 스냅샷 기록 실패는 무시 */ }
+
+  return plan
 }
