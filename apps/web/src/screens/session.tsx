@@ -179,8 +179,8 @@ export function S_Grading({ onClose }: { onClose?: () => void }) {
 }
 
 // 6. 채점 결과
-export function S_Grade({ answerResult, result = 'partial', onClose, onNext }: {
-  answerResult?: AnswerResult; result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void
+export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial', onClose, onNext }: {
+  answerResult?: AnswerResult; done?: number; total?: number; result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void
 }) {
   const R: Record<string, { tone: Tone; score: string; fill: number; label: string; reason: string }> = {
     correct: { tone: 'ok', score: '1.0', fill: 100, label: '정답', reason: '시제와 since 뒤 기간 해석까지 정확해요.' },
@@ -199,7 +199,7 @@ export function S_Grade({ answerResult, result = 'partial', onClose, onNext }: {
   const explanation = answerResult?.explanation ?? 'since + 기간 → 현재완료. 과거형은 현재와 단절됩니다.'
   return (
     <Screen>
-      <SessHead done={25} total={42} onClose={onClose} />
+      <SessHead done={done} total={total} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 56, height: 56, borderRadius: 28, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `conic-gradient(${t.c} 0 ${r.fill}%, ${WF.fill2} ${r.fill}% 100%)` }}>
@@ -236,8 +236,9 @@ export function S_Grade({ answerResult, result = 'partial', onClose, onNext }: {
 }
 
 // 8. 세션 완료 요약
-export function S_Summary({ onDone }: { onDone?: () => void }) {
-  const stats: [string, string][] = [['42', '문항'], ['81%', '정답률'], ['23분', '학습시간']]
+export function S_Summary({ completed = 42, correct, onDone }: { completed?: number; correct?: number; onDone?: () => void }) {
+  const accuracy = correct == null || completed === 0 ? 81 : Math.round((correct / completed) * 100)
+  const stats: [string, string][] = [[String(completed), '문항'], [`${accuracy}%`, '정답률'], ['-', '학습시간']]
   return (
     <Screen>
       <Body style={{ paddingTop: 40, paddingLeft: 28, paddingRight: 28, gap: 0, alignItems: 'center', textAlign: 'center' }}>
