@@ -2,11 +2,86 @@
 import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Btn, Marker, TabBar } from '../design/kit'
 import { RetentionChart, HealthTrend } from '../design/charts'
+import { HEALTH_DISPLAY } from './home'
+import type { Track } from '../api'
+import type { TodaySummary } from '../today'
 
 type TabName = 'home' | 'today' | 'stats' | 'settings'
 
-// 9. 오늘 (통합 큐)
-export function S_Today({ onStart, onNav }: { onStart?: () => void; onNav?: (t: TabName) => void }) {
+// 9. 오늘 (통합 큐). today 제공 시 실데이터(여러 트랙 합산), null=로딩, undefined=데모 목업.
+export function S_Today({ today, onStart, onOpen, onNav }: {
+  today?: TodaySummary | null
+  onStart?: (track?: Track) => void
+  onOpen?: (track: Track) => void
+  onNav?: (t: TabName) => void
+}) {
+  if (today === undefined) return <DemoToday onStart={() => onStart?.()} onNav={onNav} />
+  return <RealToday today={today} onStart={onStart} onOpen={onOpen} onNav={onNav} />
+}
+
+function RealToday({ today, onStart, onOpen, onNav }: {
+  today: TodaySummary | null
+  onStart?: (track?: Track) => void
+  onOpen?: (track: Track) => void
+  onNav?: (t: TabName) => void
+}) {
+  return (
+    <Screen>
+      <TopBar title="오늘 할 일" big />
+      <div style={{ padding: '0 22px 6px', fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>
+        {today === null ? '불러오는 중…'
+          : today.totalCards > 0 ? `전체 ${today.totalCards}문항 · 약 ${today.totalMinutes}분`
+          : '오늘 예정된 학습이 없어요'}
+      </div>
+      <Body gap={13}>
+        {today === null ? null : today.rows.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: WF.ink3, textAlign: 'center', padding: '24px 0' }}>아직 트랙이 없어요.</div>
+        ) : today.rows.map(({ track, plan }) => {
+          const hd = HEALTH_DISPLAY[plan.health]
+          const active = plan.todayTotal > 0
+          const dleft = plan.daysLeft
+          const header = (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: active ? 10 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Marker tone={hd.tone} /><span style={{ fontWeight: 700, fontSize: 16 }}>{track.title}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                {active && <span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>{plan.todayTotal}문항</span>}
+                {plan.examSet && dleft !== null
+                  ? <Dday n={Math.max(0, dleft)} urgent={dleft <= 3} />
+                  : <Chip tone="off">시험일 미설정</Chip>}
+              </div>
+            </div>
+          )
+          // 할 일 있는 트랙: 시작 버튼이 주행동. 완료/미설정 트랙: 카드 탭 → 대시보드.
+          if (active) {
+            return (
+              <Card key={track.id} strong>
+                {header}
+                <div style={{ marginBottom: 12 }}><Chip tone={hd.tone} strong={hd.tone === 'danger' || hd.tone === 'crit'}>{hd.title}</Chip></div>
+                <Btn primary sm onClick={() => onStart?.(track)}>{track.title} 시작 ›</Btn>
+              </Card>
+            )
+          }
+          return (
+            <div key={track.id} onClick={() => onOpen?.(track)} style={{ cursor: 'pointer' }}>
+              <Card>
+                {header}
+                <div style={{ marginTop: 8, fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>
+                  {plan.examSet ? '오늘 할 분량 없음 ✓' : '시험일을 설정하면 계획이 생성돼요'}
+                </div>
+              </Card>
+            </div>
+          )
+        })}
+      </Body>
+      <TabBar active="today" onNav={onNav} />
+    </Screen>
+  )
+}
+
+// 데모 목업(백엔드 없음) — 원본 와이어프레임 비주얼 보존.
+function DemoToday({ onStart, onNav }: { onStart?: () => void; onNav?: (t: TabName) => void }) {
   return (
     <Screen>
       <TopBar title="오늘 할 일" big />
