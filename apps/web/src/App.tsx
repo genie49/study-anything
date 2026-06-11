@@ -46,6 +46,8 @@ export default function App() {
   const [sessionResults, setSessionResults] = useState<AnswerResult[]>([])
   const [requeuedCardIds, setRequeuedCardIds] = useState<Set<string>>(() => new Set())
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
+  const [submitPending, setSubmitPending] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const refreshTracks = useCallback(async () => {
     if (!hasBackend) return
@@ -87,31 +89,45 @@ export default function App() {
       setSessionResults([])
       setRequeuedCardIds(new Set())
       setAnswerResult(null)
+      setSubmitError(null)
+      setSubmitPending(false)
       if (q.items.length === 0) { setScreen('dashboard'); return }
     }
     setScreen('concept')
   }
   const submitCurrentAnswer = async (answer: string) => {
     const item = session?.items[sessionIndex]
+    if (!answer.trim()) return
+    setSubmitError(null)
+    setSubmitPending(true)
     if (hasBackend && selected && item) {
-      const result = await submitAnswer(selected.id, {
-        stateId: item.stateId,
-        cardId: item.cardId,
-        answer,
-      })
-      setAnswerResult(result)
-      setSessionResults((prev) => [...prev, result])
-      if (result.grade === 'again' && !requeuedCardIds.has(item.cardId)) {
-        setRequeuedCardIds((prev) => new Set(prev).add(item.cardId))
-        setSession((prev) => {
-          if (!prev) return prev
-          const items = [...prev.items]
-          const insertAt = Math.min(items.length, sessionIndex + 4)
-          items.splice(insertAt, 0, item)
-          return { ...prev, total: items.length, items }
+      try {
+        const result = await submitAnswer(selected.id, {
+          stateId: item.stateId,
+          cardId: item.cardId,
+          answer: answer.trim(),
         })
+        setAnswerResult(result)
+        setSessionResults((prev) => [...prev, result])
+        if (result.grade === 'again' && !requeuedCardIds.has(item.cardId)) {
+          setRequeuedCardIds((prev) => new Set(prev).add(item.cardId))
+          setSession((prev) => {
+            if (!prev) return prev
+            const items = [...prev.items]
+            const insertAt = Math.min(items.length, sessionIndex + 4)
+            items.splice(insertAt, 0, item)
+            return { ...prev, total: items.length, items }
+          })
+        }
+        setScreen('grade')
+      } catch (e) {
+        setSubmitError((e as Error).message)
+      } finally {
+        setSubmitPending(false)
       }
+      return
     }
+    setSubmitPending(false)
     setScreen('grade')
   }
   const nextSessionStep = () => {
@@ -120,6 +136,7 @@ export default function App() {
     if (hasBackend && session && next < total) {
       setSessionIndex(next)
       setAnswerResult(null)
+      setSubmitError(null)
       setScreen('concept')
       return
     }
@@ -178,7 +195,7 @@ export default function App() {
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} onSave={onExamSave} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
       case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
-      case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
+      case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} />
       case 'summary': return <S_Summary completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onDone={() => setScreen('dashboard')} />
       default: return homeView()
