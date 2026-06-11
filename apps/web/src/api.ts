@@ -6,6 +6,13 @@ const API = import.meta.env.VITE_API_URL ?? ''
 
 export type Track = { id: string; trackSlug: string; title: string; examDate: string | null; status: string }
 export type ImportSummary = { trackId: string; trackSlug: string; title: string; decks: number; concepts: number; cards: number; archived: number }
+export type HealthState = 'no_exam' | 'on_track' | 'behind_overload' | 'behind_mastery' | 'ahead' | 'infeasible'
+export type TrackPlan = {
+  examSet: boolean; daysLeft: number | null; health: HealthState; suspendNew: boolean
+  total: number; mastered: number; progressPct: number
+  todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
+  backlog: number; newRemaining: number; feasible: boolean
+}
 
 async function authedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers)
@@ -30,6 +37,13 @@ export async function getTracks(): Promise<Track[]> {
   const res = await authedFetch('/tracks')
   if (!res.ok) throw new Error(`트랙 목록 조회 실패 (${await errorMessage(res)})`)
   return (await res.json() as { tracks: Track[] }).tracks
+}
+
+// GET /tracks/:id/plan — 무동결 일일 플랜(런타임 재계산).
+export async function getPlan(id: string): Promise<TrackPlan> {
+  const res = await authedFetch(`/tracks/${id}/plan`)
+  if (!res.ok) throw new Error(`플랜 조회 실패 (${await errorMessage(res)})`)
+  return (await res.json() as { plan: TrackPlan }).plan
 }
 
 // POST /tracks/import — .soul.zip 멀티파트 업로드(브라우저가 boundary 설정 → content-type 수동 지정 금지).

@@ -53,6 +53,25 @@ describe('GET /tracks', () => {
   })
 })
 
+describe('GET /tracks/:id/plan', () => {
+  it('인증 없으면 401', async () => {
+    expect((await app.request('/tracks/abc/plan')).status).toBe(401)
+  })
+  it('없는 트랙 → 404', async () => {
+    const res = await app.request('/tracks/64b2f0000000000000000000/plan', { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(404)
+  })
+  it('import한 트랙 → 플랜 반환(전부 신규)', async () => {
+    const { trackId } = await importBundle(USER, bundle())
+    const res = await app.request(`/tracks/${trackId}/plan`, { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const { plan } = await res.json() as { plan: { total: number; newRemaining: number; examSet: boolean } }
+    expect(plan.total).toBe(1)
+    expect(plan.newRemaining).toBe(1)
+    expect(plan.examSet).toBe(false) // bundle엔 examDate 없음
+  })
+})
+
 describe('PATCH /tracks/:id', () => {
   it('인증 없으면 401', async () => {
     const res = await app.request('/tracks/abc', { method: 'PATCH', body: '{}', headers: { 'content-type': 'application/json' } })

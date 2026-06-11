@@ -1,9 +1,19 @@
 // 홈 · 빈상태 · 트랙 대시보드 · 트랙 수정 · 로그인 — screens-home.jsx 이식.
-import { useState } from 'react'
-import { WF, TONE } from '../design/tokens'
+import { useState, useEffect } from 'react'
+import { WF, TONE, type Tone } from '../design/tokens'
 import { Screen, TopBar, Body, Card, Chip, Bar, Dday, Divider, Btn, Field, Marker, InfoDot, HealthSheet, TabBar } from '../design/kit'
 import { AppMark } from '../design/charts'
-import type { Track } from '../api'
+import { getPlan, type Track, type TrackPlan, type HealthState } from '../api'
+
+// 건강상태 → 배너 표시(톤·문구).
+const HEALTH_DISPLAY: Record<HealthState, { tone: Tone; title: string; body: string }> = {
+  no_exam:         { tone: 'off',    title: '시험일 미설정', body: '시험일을 설정하면 학습 계획이 생성됩니다. ‘수정’에서 지정하세요.' },
+  on_track:        { tone: 'mid',    title: '순항',         body: '오늘 분량을 진행하세요.' },
+  behind_overload: { tone: 'danger', title: '과부하',       body: '밀린 분량이 쌓였어요. 핵심부터 좁혀 자동으로 진행합니다.' },
+  behind_mastery:  { tone: 'warn',   title: '숙달 부족',     body: '정답률이 목표에 못 미쳐요. 복습·심화를 늘립니다.' },
+  ahead:           { tone: 'ok',     title: '여유',         body: '오늘 분량을 마쳤어요. 신규를 앞당겨 더 할 수 있어요.' },
+  infeasible:      { tone: 'crit',   title: '실현 어려움',   body: '남은 기간으로 전 범위가 빠듯해요. 우선순위를 자동 정리합니다.' },
+}
 
 type Tab = 'home' | 'today' | 'stats' | 'settings'
 
@@ -165,13 +175,20 @@ export function S_Empty({ onAdd, onNav }: { onAdd?: () => void; onNav?: (t: 'hom
 export function S_Dashboard({ track, defaultInfo = false, onStart, onEdit, onBack }: {
   track?: Track; defaultInfo?: boolean; onStart?: () => void; onEdit?: () => void; onBack?: () => void
 }) {
-  if (track) return <RealDashboard track={track} onEdit={onEdit} onBack={onBack} />
+  if (track) return <RealDashboard track={track} onStart={onStart} onEdit={onEdit} onBack={onBack} />
   return <DemoDashboard defaultInfo={defaultInfo} onStart={onStart} onEdit={onEdit} onBack={onBack} />
 }
 
-function RealDashboard({ track, onEdit, onBack }: { track: Track; onEdit?: () => void; onBack?: () => void }) {
+function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onStart?: () => void; onEdit?: () => void; onBack?: () => void }) {
+  const [plan, setPlan] = useState<TrackPlan | null>(null)
+  const [info, setInfo] = useState(false)
+  useEffect(() => { setPlan(null); void getPlan(track.id).then(setPlan).catch(() => setPlan(null)) }, [track.id])
+
   const hasExam = !!track.examDate
   const n = hasExam ? Math.max(0, ddays(track.examDate as string)) : null
+  const hd = plan ? HEALTH_DISPLAY[plan.health] : null
+  const tone = hd?.tone ?? 'neutral'
+
   return (
     <Screen>
       <TopBar title={track.title} back action={{ label: '수정' }} onBack={onBack} onAction={onEdit} />
@@ -186,16 +203,41 @@ function RealDashboard({ track, onEdit, onBack }: { track: Track; onEdit?: () =>
             <div style={{ marginTop: 6 }}><Chip tone="off">시험일 설정 필요</Chip></div>
           )}
         </div>
-        <Card style={{ background: WF.fill1, borderStyle: 'dashed' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>학습 계획 준비 중</div>
-          <div style={{ fontSize: 13, color: WF.ink2, lineHeight: 1.55 }}>
-            {hasExam
-              ? '오늘의 학습·건강 상태는 스케줄러 연결 후 표시됩니다.'
-              : '시험일을 설정하면 학습 계획이 생성됩니다. ‘수정’에서 지정하세요.'}
-          </div>
-        </Card>
-        <div style={{ marginTop: 'auto', fontFamily: WF.mono, fontSize: 11, color: WF.ink3, textAlign: 'center' }}>{track.trackSlug}</div>
+
+        {!plan ? (
+          <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center', padding: '8px 0' }}>플랜 계산 중…</div>
+        ) : (
+          <>
+            {/* 건강 배너 — 상태색 + ? 설명 시트 */}
+            <Card strong style={{ background: TONE[tone].bg, borderColor: TONE[tone].c }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Marker tone={tone} /><span style={{ fontWeight: 700, fontSize: 15 }}>{hd?.title}</span>
+                <span style={{ marginLeft: 'auto' }}><InfoDot onClick={() => setInfo(true)} /></span>
+              </div>
+              <div style={{ fontSize: 13.5, color: WF.ink2, lineHeight: 1.55, marginTop: 9 }}>{hd?.body}</div>
+            </Card>
+
+            {/* 오늘의 학습 — 실제 플랜 */}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: WF.ink2, marginBottom: 9, fontFamily: WF.mono, letterSpacing: '0.3px' }}>오늘의 학습</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 10 }}>
+                <span>개념 {plan.todayNew} · 다지기 {plan.todayReview}</span>
+                <span style={{ color: WF.ink2, fontFamily: WF.mono, fontSize: 12 }}>예상 {plan.estMinutes}분</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Bar pct={plan.progressPct} dark /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>{plan.mastered}/{plan.total}</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 'auto' }}>
+              {plan.todayTotal > 0
+                ? <Btn primary onClick={onStart}>▶  오늘 학습 시작 ({plan.todayTotal}문항)</Btn>
+                : <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center' }}>오늘 할 분량이 없어요 ✓</div>}
+            </div>
+          </>
+        )}
       </Body>
+      {info && <HealthSheet onClose={() => setInfo(false)} />}
     </Screen>
   )
 }
