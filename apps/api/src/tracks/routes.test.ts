@@ -10,6 +10,7 @@ vi.mock('../auth/store', async (orig) => ({
   isDenied: async () => false,
 }))
 
+import { zipSync, strToU8 } from 'fflate'
 import app from '../app'
 import { connectMongo, closeMongo, getDb } from '../db/mongo'
 import { signAccess } from '../auth/jwt'
@@ -60,6 +61,40 @@ describe('PATCH /tracks/:id', () => {
     const res = await app.request(`/tracks/${trackId}`, {
       method: 'PATCH', headers: { 'content-type': 'application/json', authorization: await bearer(USER) }, body: '{}',
     })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /tracks/import (zip 멀티파트)', () => {
+  // pack_soul.py 레이아웃의 zip을 메모리에서 생성.
+  function soulZip(trackSlug: string): Uint8Array {
+    const manifest = { soulVersion: 1, trackSlug, title: trackSlug, decks: [{ slug: 'd1', title: 'Deck 1', order: 1 }] }
+    const deck = { deckSlug: 'd1', concepts: [{ conceptKey: `${trackSlug}-pp`, title: 'T', bodyMd: '#', order: 1,
+      cards: [{ cardKey: `${trackSlug}-c1`, type: 'qa', prompt: 'q', answer: 'a', explanation: 'e', difficultyPrior: 0.3 }] }] }
+    return zipSync({ 'manifest.json': strToU8(JSON.stringify(manifest)), 'decks/d1.json': strToU8(JSON.stringify(deck)) })
+  }
+
+  it('인증 없으면 401', async () => {
+    const fd = new FormData()
+    fd.append('file', new File([soulZip('오픽')], '오픽.zip', { type: 'application/zip' }))
+    const res = await app.request('/tracks/import', { method: 'POST', body: fd })
+    expect(res.status).toBe(401)
+  })
+
+  it('zip 업로드 → 200 + DB 적재', async () => {
+    const fd = new FormData()
+    fd.append('file', new File([soulZip('지각')], '지각.zip', { type: 'application/zip' }))
+    const res = await app.request('/tracks/import', { method: 'POST', body: fd, headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const json = await res.json() as { ok: boolean; cards: number; trackId: string }
+    expect(json.cards).toBe(1)
+    expect(await getDb().collection('cards').countDocuments({ userId: USER, status: 'active', soulKey: '지각-c1' })).toBe(1)
+  })
+
+  it('깨진 zip → 400', async () => {
+    const fd = new FormData()
+    fd.append('file', new File([new Uint8Array([1, 2, 3])], 'bad.zip', { type: 'application/zip' }))
+    const res = await app.request('/tracks/import', { method: 'POST', body: fd, headers: { authorization: await bearer(USER) } })
     expect(res.status).toBe(400)
   })
 })
