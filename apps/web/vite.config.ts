@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const allowedHosts = ['.up.railway.app']
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   // .env를 모노레포 루트에서 로드(api의 env.ts와 동일 소스). raw `pnpm dev`로 띄워도
@@ -10,6 +12,12 @@ export default defineConfig({
   envDir: '../../',
   server: {
     host: true, // 컨테이너 외부에서 접근 가능하게
+    allowedHosts,
+    port: 5173,
+  },
+  preview: {
+    host: true,
+    allowedHosts,
     port: 5173,
   },
   test: {
