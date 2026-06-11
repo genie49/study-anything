@@ -2,7 +2,7 @@
 
 > 관련: [데이터 모델](./data-model.md) · [파이프라인](./data-pipeline.md) · [런타임 채점](./runtime-grading.md)
 
-pnpm 모노레포 + docker-compose로 **앱(프론트/백)과 인프라(Mongo/Redis)를 한 번에** 띄운다.
+pnpm 모노레포 + docker-compose로 **앱(프론트/백)과 Mongo를 한 번에** 띄운다. Redis는 Upstash REST를 사용한다.
 
 ## 구조
 
@@ -11,7 +11,7 @@ study-anything/
 ├── apps/
 │   ├── web/   # 프론트: Vite + React 19 + Tailwind v4 + vitest      (:5173)
 │   └── api/   # 백: Hono on Node(@hono/node-server) + tsx watch     (:8787)
-├── docker-compose.yml   # web · api · mongo · redis
+├── docker-compose.yml   # web · api · mongo
 ├── pnpm-workspace.yaml  # apps/* 워크스페이스
 ├── .env.example         # 복사 → .env (gitignore)
 └── docs/
@@ -20,9 +20,8 @@ study-anything/
 | 서비스 | 이미지/런타임 | 포트 | 비고 |
 |---|---|---|---|
 | web | node:22-alpine (Vite dev) | 5173 | bind-mount 핫리로드 |
-| api | node:22-alpine (tsx watch) | 8787 | `/health` 제공, Mongo/Redis 연결 |
+| api | node:22-alpine (tsx watch) | 8787 | `/health` 제공, Mongo/Upstash Redis 연결 |
 | mongo | `mongo:7` | 27017 | named volume `mongo-data`, healthcheck |
-| redis | `redis:7-alpine` | 6379 | named volume `redis-data`, healthcheck |
 
 ## 실행
 
@@ -41,7 +40,7 @@ docker compose up --build   # 또는: pnpm dev:build
 
 ```bash
 pnpm install
-# Mongo/Redis는 별도로 띄우고 .env의 MONGO_URL/REDIS_URL을 localhost로
+# Mongo는 별도로 띄우고 .env의 MONGO_URL을 localhost로
 pnpm api   # apps/api dev
 pnpm web   # apps/web dev
 pnpm test  # 전체 워크스페이스 테스트(vitest)
@@ -57,7 +56,7 @@ pnpm test  # 전체 워크스페이스 테스트(vitest)
 | `JWT_SECRET` · `ACCESS_TTL` · `REFRESH_TTL` | JWT 서명·수명 | 서버만 |
 | `WEB_ORIGIN` | CORS·쿠키 origin | 프론트 주소 |
 | `MONGO_URL` | Mongo 접속 | compose는 `mongodb://mongo:27017/study` 주입 |
-| `REDIS_URL` | Redis 접속 | compose는 `redis://redis:6379` 주입 |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Upstash Redis REST 접속 | 서버만, OAuth state와 access denylist 저장 |
 | `PORT` | api 포트 | 기본 8787 |
 | `VITE_API_URL` | 프론트→백 주소 | 기본 `http://localhost:8787` |
 
@@ -67,7 +66,7 @@ DB가 진실원천이고 status/진도/플랜은 [요청 시 계산](./data-mode
 - on-demand 집계의 **선택적 캐시**(진도 누계 등) — 느려질 때만.
 - 향후 채점 LLM **레이트리밋** / 세션 토큰 저장.
 
-지금은 연결만 세팅(`apps/api/src/db/redis.ts`)하고 실사용은 후속.
+현재는 OAuth state/PKCE verifier의 10분 임시 저장과 access token denylist에 사용한다.
 
 ## 범위 (현재 스캐폴드)
 
