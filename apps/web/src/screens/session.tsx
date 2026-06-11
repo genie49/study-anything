@@ -197,6 +197,7 @@ export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial
   const reason = answerResult?.reason ?? r.reason
   const referenceAnswer = answerResult?.answer ?? 'has lived'
   const explanation = answerResult?.explanation ?? 'since + 기간 → 현재완료. 과거형은 현재와 단절됩니다.'
+  const modeLabel = answerResult?.graderMode === 'llm' ? 'LLM 채점' : answerResult?.graderMode === 'mcq' ? 'mcq 채점' : answerResult ? 'exact 채점' : 'LLM 채점'
   return (
     <Screen>
       <SessHead done={done} total={total} onClose={onClose} />
@@ -209,7 +210,7 @@ export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Marker tone={r.tone} /><span style={{ fontSize: 18, fontWeight: 700 }}>{r.label}</span>
             </div>
-            <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3, marginTop: 3 }}>score {score} · {answerResult ? 'exact 채점' : 'LLM 채점'}</div>
+            <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3, marginTop: 3 }}>score {score} · {modeLabel}</div>
           </div>
         </div>
         <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.6, padding: '13px 14px', background: t.bg, border: `1px solid ${t.c}`, borderRadius: 12, color: WF.ink }}>{reason}</div>
