@@ -22,12 +22,12 @@ services:
     volumes:
       - ./apps/api:/app/apps/api
       - /app/apps/api/node_modules
-    environment:
+    env_file:
+      - .env            # GOOGLE_*, JWT_SECRET, WEB_ORIGIN 등 인증 변수 주입
+    environment:        # 컨테이너 내부 주소는 .env값 위에 덮어씀(우선순위 높음)
       - PORT=8787
       - MONGO_URL=mongodb://mongo:27017/study
       - REDIS_URL=redis://redis:6379
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GRADER_MODEL=${GRADER_MODEL:-gemini-3.1-flash-lite}
     depends_on:
       mongo:
         condition: service_healthy

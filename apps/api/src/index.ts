@@ -1,3 +1,4 @@
+import './env' // .env 로드 — config 평가 전에 가장 먼저
 import { serve } from '@hono/node-server'
 import app from './app'
 import { connectMongo } from './db/mongo'
