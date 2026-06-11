@@ -1,5 +1,5 @@
 // 구글 OAuth (Authorization Code + PKCE) — google-auth-library. auth.md.
-import { OAuth2Client } from 'google-auth-library'
+import { OAuth2Client, CodeChallengeMethod } from 'google-auth-library'
 import { randomBytes } from 'node:crypto'
 import { config, assertGoogleConfigured } from '../config'
 import { getRedis } from '../db/redis'
@@ -23,7 +23,7 @@ export async function createAuthRequest(): Promise<{ url: string; state: string 
     access_type: 'offline',
     scope: ['openid', 'email', 'profile'],
     state,
-    code_challenge_method: 'S256' as never,
+    code_challenge_method: CodeChallengeMethod.S256,
     code_challenge: codeChallenge,
     nonce,
   })

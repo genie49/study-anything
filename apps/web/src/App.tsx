@@ -1,10 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { WF } from './design/tokens'
+import { hasBackend, login, tryRefresh, logout } from './auth'
 import { S_Login, S_TrackList, S_Dashboard, S_Edit } from './screens/home'
 import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
 import { S_Today, S_Stats, S_Settings } from './screens/tabs'
-
-const API_URL = import.meta.env.VITE_API_URL ?? ''
 
 type Screen =
   | 'home' | 'today' | 'stats' | 'settings'
@@ -26,26 +25,31 @@ export default function App() {
   const [authed, setAuthed] = useState(false)
   const [screen, setScreen] = useState<Screen>('home')
 
+  // 백엔드가 있으면 앱 로드 시 refresh 쿠키로 침묵 로그인 시도.
+  useEffect(() => {
+    if (hasBackend) { void tryRefresh().then(setAuthed) }
+  }, [])
+
   if (!authed) {
     return (
       <Stage>
-        {/* TODO(auth): 실제로는 `${API_URL}/auth/google`로 리다이렉트. 지금은 데모 진입. */}
         <S_Login onGoogle={() => {
-          if (API_URL) { /* window.location.href = `${API_URL}/auth/google` */ }
-          setAuthed(true)
+          if (hasBackend) login()       // → 백엔드 구글 OAuth로 리다이렉트
+          else setAuthed(true)          // 데모: 백엔드 없을 때 바로 진입
         }} />
       </Stage>
     )
   }
 
   const nav = (t: Tab) => setScreen(t)
+  const doLogout = () => { void logout().then(() => setAuthed(false)) }
 
   const view = () => {
     switch (screen) {
       case 'home': return <S_TrackList onOpen={() => setScreen('dashboard')} onNav={nav} />
       case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
       case 'stats': return <S_Stats onNav={nav} />
-      case 'settings': return <S_Settings onLogout={() => setAuthed(false)} onNav={nav} />
+      case 'settings': return <S_Settings onLogout={doLogout} onNav={nav} />
       case 'dashboard': return <S_Dashboard onStart={() => setScreen('concept')} onEdit={() => setScreen('edit')} onBack={() => setScreen('home')} />
       case 'edit': return <S_Edit onBack={() => setScreen('dashboard')} onSave={() => setScreen('dashboard')} />
       // 세션 플로우: 개념(게이트 통과) → 다지기 → 채점 → 완료
