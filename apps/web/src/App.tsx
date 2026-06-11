@@ -44,6 +44,7 @@ export default function App() {
   const [session, setSession] = useState<SessionQueue | null>(null)
   const [sessionIndex, setSessionIndex] = useState(0)
   const [sessionResults, setSessionResults] = useState<AnswerResult[]>([])
+  const [requeuedCardIds, setRequeuedCardIds] = useState<Set<string>>(() => new Set())
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
 
   const refreshTracks = useCallback(async () => {
@@ -84,6 +85,7 @@ export default function App() {
       setSession(q)
       setSessionIndex(0)
       setSessionResults([])
+      setRequeuedCardIds(new Set())
       setAnswerResult(null)
       if (q.items.length === 0) { setScreen('dashboard'); return }
     }
@@ -99,6 +101,16 @@ export default function App() {
       })
       setAnswerResult(result)
       setSessionResults((prev) => [...prev, result])
+      if (result.grade === 'again' && !requeuedCardIds.has(item.cardId)) {
+        setRequeuedCardIds((prev) => new Set(prev).add(item.cardId))
+        setSession((prev) => {
+          if (!prev) return prev
+          const items = [...prev.items]
+          const insertAt = Math.min(items.length, sessionIndex + 4)
+          items.splice(insertAt, 0, item)
+          return { ...prev, total: items.length, items }
+        })
+      }
     }
     setScreen('grade')
   }
@@ -166,7 +178,7 @@ export default function App() {
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} onSave={onExamSave} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
       case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
-      case 'quiz': return <S_Quiz item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
+      case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} />
       case 'summary': return <S_Summary completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onDone={() => setScreen('dashboard')} />
       default: return homeView()
