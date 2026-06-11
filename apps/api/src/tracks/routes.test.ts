@@ -95,6 +95,42 @@ describe('GET /tracks/:id/session', () => {
   })
 })
 
+describe('GET /tracks/:id/session — 인터리빙(§7.4)', () => {
+  // 2개념 × 2카드. 신규 throttle을 피하려 import 후 전 카드를 "연체 복습"으로 시딩.
+  function twoConceptBundle(slug: string): SoulBundle {
+    return {
+      manifest: { soulVersion: 1, trackSlug: slug, title: slug, decks: [{ slug: 'd1', title: 'D', order: 1 }] },
+      decks: [{ deckSlug: 'd1', concepts: [
+        { conceptKey: `${slug}-A`, title: '개념A', bodyMd: '#', order: 1, cards: [
+          { cardKey: `${slug}-a1`, type: 'qa', prompt: 'qa1', answer: 'a', explanation: 'e', difficultyPrior: 0.3 },
+          { cardKey: `${slug}-a2`, type: 'qa', prompt: 'qa2', answer: 'a', explanation: 'e', difficultyPrior: 0.3 },
+        ] },
+        { conceptKey: `${slug}-B`, title: '개념B', bodyMd: '#', order: 2, cards: [
+          { cardKey: `${slug}-b1`, type: 'qa', prompt: 'qb1', answer: 'a', explanation: 'e', difficultyPrior: 0.3 },
+          { cardKey: `${slug}-b2`, type: 'qa', prompt: 'qb2', answer: 'a', explanation: 'e', difficultyPrior: 0.3 },
+        ] },
+      ] }],
+      examDate: '2026-07-15',
+    }
+  }
+
+  it('같은 개념 카드가 연속으로 나오지 않게 섞여 반환', async () => {
+    const { trackId } = await importBundle(USER, twoConceptBundle('인터리브'))
+    // dueAt 동일·연체로 만들면 시딩 순서는 [A,A,B,B] → 인터리빙 없으면 A가 연속.
+    await getDb().collection('cardStates').updateMany(
+      { userId: USER, trackId: new ObjectId(trackId) },
+      { $set: { stage: 'review', S: 5, D: 0.3, reps: 3, lapses: 0, lastReviewedAt: new Date('2026-06-01'), dueAt: new Date('2026-06-05') } },
+    )
+    const res = await app.request(`/tracks/${trackId}/session`, { headers: { authorization: await bearer(USER) } })
+    expect(res.status).toBe(200)
+    const { session } = await res.json() as { session: { total: number; items: { conceptTitle: string }[] } }
+    expect(session.total).toBe(4)
+    for (let i = 1; i < session.items.length; i++) {
+      expect(session.items[i].conceptTitle).not.toBe(session.items[i - 1].conceptTitle)
+    }
+  })
+})
+
 describe('POST /tracks/:id/session/answer', () => {
   it('인증 없으면 401', async () => {
     expect((await app.request('/tracks/abc/session/answer', { method: 'POST' })).status).toBe(401)
