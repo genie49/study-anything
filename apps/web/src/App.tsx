@@ -42,6 +42,8 @@ export default function App() {
   const [selected, setSelected] = useState<Track | null>(null)                       // 대시보드/수정 대상
   const [examTrack, setExamTrack] = useState<{ id: string; title: string } | null>(null) // 업로드 후 시험일 설정 대상
   const [session, setSession] = useState<SessionQueue | null>(null)
+  const [sessionIndex, setSessionIndex] = useState(0)
+  const [sessionResults, setSessionResults] = useState<AnswerResult[]>([])
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
 
   const refreshTracks = useCallback(async () => {
@@ -80,13 +82,15 @@ export default function App() {
     if (hasBackend && selected) {
       const q = await getSession(selected.id)
       setSession(q)
+      setSessionIndex(0)
+      setSessionResults([])
       setAnswerResult(null)
       if (q.items.length === 0) { setScreen('dashboard'); return }
     }
     setScreen('concept')
   }
   const submitCurrentAnswer = async (answer: string) => {
-    const item = session?.items[0]
+    const item = session?.items[sessionIndex]
     if (hasBackend && selected && item) {
       const result = await submitAnswer(selected.id, {
         stateId: item.stateId,
@@ -94,8 +98,20 @@ export default function App() {
         answer,
       })
       setAnswerResult(result)
+      setSessionResults((prev) => [...prev, result])
     }
     setScreen('grade')
+  }
+  const nextSessionStep = () => {
+    const total = session?.items.length ?? 0
+    const next = sessionIndex + 1
+    if (hasBackend && session && next < total) {
+      setSessionIndex(next)
+      setAnswerResult(null)
+      setScreen('concept')
+      return
+    }
+    setScreen('summary')
   }
 
   // 홈: 백엔드 모드는 실데이터(빈 목록→S_Empty, 로딩→스피너), 데모 모드는 목업.
@@ -135,6 +151,9 @@ export default function App() {
   }
 
   const view = () => {
+    const currentItem = session?.items[sessionIndex]
+    const totalItems = session?.items.length ?? 42
+    const done = hasBackend ? sessionResults.length : 0
     switch (screen) {
       case 'home': return homeView()
       case 'today': return <S_Today onStart={() => setScreen('concept')} onNav={nav} />
@@ -146,10 +165,10 @@ export default function App() {
       case 'upload': return <S_Upload upload={hasBackend ? importZip : undefined} onBack={() => setScreen('home')} onDone={onUploaded} />
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} onSave={onExamSave} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
-      case 'concept': return <S_Concept item={session?.items[0]} done={0} total={session?.total ?? 42} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
-      case 'quiz': return <S_Quiz item={session?.items[0]} done={0} total={session?.total ?? 42} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
-      case 'grade': return <S_Grade answerResult={answerResult ?? undefined} result="partial" onClose={() => setScreen('dashboard')} onNext={() => setScreen('summary')} />
-      case 'summary': return <S_Summary onDone={() => setScreen('dashboard')} />
+      case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} stage="ok" onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} />
+      case 'quiz': return <S_Quiz item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} />
+      case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} />
+      case 'summary': return <S_Summary completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onDone={() => setScreen('dashboard')} />
       default: return homeView()
     }
   }
