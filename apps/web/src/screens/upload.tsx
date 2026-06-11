@@ -156,20 +156,39 @@ export function S_Upload({ onBack, onDone, upload }: {
   )
 }
 
-// 시험일 설정 — 업로드 완료 후 강제 단계(examDate는 soul/zip에 없음).
-const MONTH_DAYS = 30      // 2026년 6월
-const FIRST_DOW = 1        // 2026-06-01 = 월요일
+// 시험일 설정 — 업로드 완료 후 강제 단계(examDate는 soul/zip에 없음) + 트랙 수정에서 재지정.
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
+const pad2 = (n: number) => String(n).padStart(2, '0')
 
-export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: string; onSave?: (examDateISO: string) => void }) {
-  const [selected, setSelected] = useState(11)
+// initialISO(있으면)는 백엔드가 UTC 자정으로 저장한 값 → UTC 캘린더 날짜로 해석.
+export function S_ExamDate({ trackTitle = '토익', initialISO, onSave, onCancel }: {
+  trackTitle?: string; initialISO?: string | null; onSave?: (examDateISO: string) => void; onCancel?: () => void
+}) {
+  const now = new Date()
+  const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const init = initialISO ? new Date(initialISO) : null
+  const initY = init ? init.getUTCFullYear() : now.getFullYear()
+  const initM = init ? init.getUTCMonth() : now.getMonth()
+  const initD = init ? init.getUTCDate() : now.getDate()
+
+  const [view, setView] = useState({ y: initY, m: initM })          // 표시 중인 월
+  const [sel, setSel] = useState({ y: initY, m: initM, d: initD })   // 선택한 날짜
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const exam = new Date(2026, 5, selected)
-  const today = new Date()
-  const diff = Math.max(0, Math.ceil((exam.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000))
-  const isoDate = `2026-06-${String(selected).padStart(2, '0')}` // 캘린더는 현재 2026년 6월 고정(추후 동적화)
 
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate()
+  const firstDow = new Date(view.y, view.m, 1).getDay()
+  const canPrev = new Date(view.y, view.m, 1) > new Date(todayMid.getFullYear(), todayMid.getMonth(), 1) // 과거 월 금지
+  const isPast = (d: number) => new Date(view.y, view.m, d) < todayMid
+
+  const selDate = new Date(sel.y, sel.m, sel.d)
+  const diff = Math.round((selDate.getTime() - todayMid.getTime()) / 86_400_000)
+  const isoDate = `${sel.y}-${pad2(sel.m + 1)}-${pad2(sel.d)}`
+
+  const shiftMonth = (delta: number) => {
+    const d = new Date(view.y, view.m + delta, 1)
+    setView({ y: d.getFullYear(), m: d.getMonth() })
+  }
   const save = async () => {
     if (!onSave) return
     setError(null); setSaving(true)
@@ -178,7 +197,7 @@ export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: str
 
   return (
     <Screen>
-      <TopBar title="시험일 설정" />
+      <TopBar title="시험일 설정" back={!!onCancel} onBack={onCancel} />
       <Body gap={16} style={{ paddingTop: 14 }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{trackTitle} 시험일은 언제인가요?</div>
@@ -189,9 +208,9 @@ export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: str
 
         <Card style={{ padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ color: WF.ink3, fontSize: 18 }}>‹</span>
-            <span style={{ fontSize: 14.5, fontWeight: 700 }}>2026년 6월</span>
-            <span style={{ color: WF.ink3, fontSize: 18 }}>›</span>
+            <span onClick={() => canPrev && shiftMonth(-1)} style={{ color: canPrev ? WF.ink : WF.line, fontSize: 18, cursor: canPrev ? 'pointer' : 'default', padding: '2px 8px' }}>‹</span>
+            <span style={{ fontSize: 14.5, fontWeight: 700 }}>{view.y}년 {view.m + 1}월</span>
+            <span onClick={() => shiftMonth(1)} style={{ color: WF.ink, fontSize: 18, cursor: 'pointer', padding: '2px 8px' }}>›</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 }}>
             {DOW.map((d) => (
@@ -199,15 +218,16 @@ export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: str
             ))}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
-            {Array.from({ length: FIRST_DOW }).map((_, i) => <div key={'e' + i} />)}
-            {Array.from({ length: MONTH_DAYS }, (_, i) => i + 1).map((d) => {
-              const on = d === selected
+            {Array.from({ length: firstDow }).map((_, i) => <div key={'e' + i} />)}
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+              const on = sel.y === view.y && sel.m === view.m && sel.d === d
+              const past = isPast(d)
               return (
-                <div key={d} onClick={() => setSelected(d)} style={{
+                <div key={d} onClick={() => !past && setSel({ y: view.y, m: view.m, d })} style={{
                   aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, borderRadius: 9, cursor: 'pointer',
+                  fontSize: 13, borderRadius: 9, cursor: past ? 'default' : 'pointer',
                   background: on ? WF.inkSolid : 'transparent',
-                  color: on ? '#fff' : WF.ink, fontWeight: on ? 700 : 500,
+                  color: on ? '#fff' : past ? WF.line : WF.ink, fontWeight: on ? 700 : 500,
                 }}>{d}</div>
               )
             })}
@@ -215,13 +235,13 @@ export function S_ExamDate({ trackTitle = '토익', onSave }: { trackTitle?: str
         </Card>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
-          <span style={{ fontSize: 13.5, color: WF.ink2 }}>선택: 2026년 6월 {selected}일</span>
-          <Dday n={diff} urgent={diff <= 3} />
+          <span style={{ fontSize: 13.5, color: WF.ink2 }}>선택: {sel.y}년 {sel.m + 1}월 {sel.d}일</span>
+          <Dday n={Math.max(0, diff)} urgent={diff <= 3} />
         </div>
 
         {error && <div style={{ fontSize: 13, color: TONE.danger.c, lineHeight: 1.5 }}>{error}</div>}
         <div style={{ marginTop: 'auto' }}>
-          <Btn primary onClick={save}>{saving ? '저장 중…' : '저장하고 학습 시작 ›'}</Btn>
+          <Btn primary onClick={save}>{saving ? '저장 중…' : onCancel ? '시험일 저장 ›' : '저장하고 학습 시작 ›'}</Btn>
         </div>
       </Body>
     </Screen>

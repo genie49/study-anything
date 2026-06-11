@@ -17,14 +17,20 @@ export const HEALTH_DISPLAY: Record<HealthState, { tone: Tone; title: string; bo
 
 type Tab = 'home' | 'today' | 'stats' | 'settings'
 
-// examDate(ISO) → 오늘 자정 기준 남은 일수. 미래만 양수.
+// examDate는 백엔드가 new Date('YYYY-MM-DD')로 UTC 자정에 저장 → 의도한 캘린더 날짜는 UTC 기준.
+// 로컬 자정과 직접 빼면 타임존만큼 어긋난다(예: KST +9h → 하루 over-count). UTC 날짜를 로컬 자정으로 환산.
+function examLocalMidnight(examDate: string): Date {
+  const e = new Date(examDate)
+  return new Date(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate())
+}
+// examDate → 오늘 자정 기준 남은 일수(정수일). 미래만 양수.
 function ddays(examDate: string): number {
-  const exam = new Date(examDate)
   const now = new Date()
-  return Math.ceil((exam.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((examLocalMidnight(examDate).getTime() - today.getTime()) / 86_400_000)
 }
 function examLabel(examDate: string): string {
-  const d = new Date(examDate)
+  const d = examLocalMidnight(examDate)
   return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -291,23 +297,27 @@ function DemoDashboard({ defaultInfo = false, onStart, onEdit, onBack }: { defau
 }
 
 // 3. 트랙 수정 (이름·시험일 + 삭제). track 제공 시 실제 값, 미제공 시 데모.
-export function S_Edit({ track, onBack, onSave, onDelete }: {
-  track?: Track; onBack?: () => void; onSave?: () => void; onDelete?: () => void
+export function S_Edit({ track, onBack, onSave, onDelete, onEditExam }: {
+  track?: Track; onBack?: () => void; onSave?: () => void; onDelete?: () => void; onEditExam?: () => void
 }) {
   const [confirm, setConfirm] = useState(false)
   const title = track?.title ?? '토익'
   const examValue = track
     ? (track.examDate ? examLabel(track.examDate) : '미설정')
     : '2026 – 06 – 11'
+  const canEditExam = !!track && !!onEditExam
   return (
     <Screen>
       <TopBar title={`${title} 수정`} back action={{ label: '저장', solid: true }} onBack={onBack} onAction={onSave} />
       <Body gap={22} style={{ paddingTop: 22 }}>
         <Field label="트랙 이름" value={title} />
-        <Field label="시험일 (deadline)" value={examValue} icon="📅" />
-        {track && (
-          <div style={{ fontSize: 12, color: WF.ink3, lineHeight: 1.5 }}>
-            시험일 변경은 트랙 추가 후 ‘시험일 설정’ 화면에서 재지정합니다(곧 이 화면에서도 지원).
+        {/* 시험일 — 탭하면 캘린더에서 재지정 */}
+        <div onClick={canEditExam ? onEditExam : undefined} style={{ cursor: canEditExam ? 'pointer' : 'default' }}>
+          <Field label="시험일 (deadline)" value={examValue} icon="📅" />
+        </div>
+        {canEditExam && (
+          <div style={{ fontSize: 12, color: WF.ink3, lineHeight: 1.5, marginTop: -14 }}>
+            시험일을 탭하면 캘린더에서 변경할 수 있어요.
           </div>
         )}
 
