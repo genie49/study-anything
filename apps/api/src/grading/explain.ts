@@ -82,7 +82,8 @@ export async function gradeSelfExplanation(concept: ExplainConcept, explanation:
     try {
       return await llmExplain(concept, explanation, { apiKey, model, timeoutMs })
     } catch {
-      // LLM 장애는 학습을 막지 않는다 — 판정 불가 시 통과 처리로 강등(자기설명은 게이트가 아니다).
+      // LLM 장애는 학습을 막지 않는다 — 판정 불가 시 통과 처리(mode:'skipped')로 강등한다.
+      // 게이트는 이 통과를 영속화하지 않으므로(explain.ts) 다음 세션에 다시 적용된다.
     }
   }
   return { sufficient: true, feedback: '설명을 기록했어요. 바로 다지기로 넘어가도 좋아요.', mode: 'skipped' }

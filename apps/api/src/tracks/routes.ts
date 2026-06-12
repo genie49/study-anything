@@ -79,7 +79,8 @@ tracks.post('/:id/session/suspend', requireAuth, async (c) => {
   return c.json({ ok: true })
 })
 
-// 개념 자기설명("왜?") 피드백 — LLM 코치가 핵심을 담았는지 판정 + 한국어 피드백. 게이트 아님.
+// 개념 자기설명("왜?") 피드백 — LLM 코치가 핵심을 담았는지 판정 + 한국어 피드백.
+// 다지기 게이트: LLM이 통과 판정(mode:llm·sufficient)하면 개념에 selfExplainedAt를 기록한다(explain.ts).
 tracks.post('/:id/concept/:conceptId/explain', requireAuth, async (c) => {
   let body: unknown
   try { body = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }

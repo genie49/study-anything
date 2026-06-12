@@ -20,6 +20,7 @@ export type SessionItem = {
   distractors: string[]
   conceptTitle: string
   conceptBodyMd: string
+  conceptPassed: boolean // 자기설명 게이트를 이미 통과한 개념인가(LLM 통과 영속분)
 }
 
 export type SessionQueue = {
@@ -116,6 +117,7 @@ export async function getSessionQueue(
       distractors: (card.distractors as string[] | undefined) ?? [],
       conceptTitle: (concept?.title as string | undefined) ?? '개념',
       conceptBodyMd: (concept?.bodyMd as string | undefined) ?? '',
+      conceptPassed: Boolean(concept?.selfExplainedAt),
     }
     return [{ conceptId: String(card.conceptId ?? ''), type: item.type, item }]
   })
