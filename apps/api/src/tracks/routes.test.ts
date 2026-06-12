@@ -135,6 +135,46 @@ describe('POST /tracks/:id/concept/:conceptId/explain — 자기설명 피드백
     expect(typeof j.feedback.feedback).toBe('string')
     expect(j.feedback.feedback.length).toBeGreaterThan(0)
     expect(j.feedback.mode).toBe('skipped') // 테스트 환경엔 LLM 키 없음 → 폴백(통과 처리)
+
+    // 폴백 통과(mode:'skipped')는 진짜 통과가 아니므로 게이트를 영구 해제하지 않는다.
+    const after = await getDb().collection('concepts').findOne({ _id: new ObjectId(cid) })
+    expect(after?.selfExplainedAt).toBeFalsy()
+  })
+
+  it('LLM 통과(mode:llm)면 selfExplainedAt 기록 + 세션이 conceptPassed=true 노출', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '게이트통과'; b.manifest.title = '게이트통과'
+    b.examDate = '2026-07-15' // 신규 카드가 오늘 세션에 나오도록
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER), 'content-type': 'application/json' }
+    const concept = await getDb().collection('concepts').findOne({ userId: USER, trackId: new ObjectId(trackId), conceptKey: 'pp' })
+    const cid = String(concept!._id)
+
+    const prevKey = config.grader.apiKey
+    config.grader.apiKey = 'test-key'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ sufficient: true, feedback: '핵심을 잘 짚었어요.' }) }] } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const ok = await app.request(`/tracks/${trackId}/concept/${cid}/explain`, { method: 'POST', headers: auth, body: JSON.stringify({ explanation: '과거 일이 지금까지 이어진다' }) })
+      expect(ok.status).toBe(200)
+      const j = await ok.json() as { feedback: { sufficient: boolean; mode: string } }
+      expect(j.feedback.mode).toBe('llm')
+      expect(j.feedback.sufficient).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+      config.grader.apiKey = prevKey
+    }
+
+    const after = await getDb().collection('concepts').findOne({ _id: new ObjectId(cid) })
+    expect(after?.selfExplainedAt).toBeInstanceOf(Date)
+
+    // 세션 큐가 통과 상태를 반영한다.
+    const sess = await app.request(`/tracks/${trackId}/session`, { headers: { authorization: await bearer(USER) } })
+    const { session } = await sess.json() as { session: { items: { conceptId: string; conceptPassed: boolean }[] } }
+    const passedItem = session.items.find((it) => it.conceptId === cid)
+    expect(passedItem?.conceptPassed).toBe(true)
   })
 })
 

@@ -46,6 +46,7 @@ type SessionSnapshot = {
   sessionResults: AnswerResult[]
   requeuedCardIds: string[]
   answerResult: AnswerResult | null
+  passedConceptIds?: string[] // 이번 세션 중 자기설명을 통과한 개념(구버전 스냅샷엔 없음 → []로 취급)
 }
 function loadSnapshot(): SessionSnapshot | null {
   try {
@@ -77,6 +78,7 @@ export default function App() {
   const [sessionIndex, setSessionIndex] = useState(0)
   const [sessionResults, setSessionResults] = useState<AnswerResult[]>([])
   const [requeuedCardIds, setRequeuedCardIds] = useState<Set<string>>(() => new Set())
+  const [passedConceptIds, setPassedConceptIds] = useState<Set<string>>(() => new Set()) // 이번 세션 중 통과한 개념(게이트 즉시 해제용)
   const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null)
   const [submitPending, setSubmitPending] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -121,6 +123,7 @@ export default function App() {
       const snap: SessionSnapshot = {
         trackId: selected.id, screen, session, sessionIndex,
         sessionResults, requeuedCardIds: [...requeuedCardIds], answerResult,
+        passedConceptIds: [...passedConceptIds],
       }
       saveSnapshot(snap)
       setResumable(snap)
@@ -128,7 +131,7 @@ export default function App() {
       clearSnapshot()
       setResumable(null)
     }
-  }, [screen, session, sessionIndex, sessionResults, answerResult, requeuedCardIds, selected])
+  }, [screen, session, sessionIndex, sessionResults, answerResult, requeuedCardIds, passedConceptIds, selected])
 
   if (!authed) {
     return (
@@ -158,6 +161,7 @@ export default function App() {
     setSessionIndex(s.sessionIndex)
     setSessionResults(s.sessionResults ?? [])
     setRequeuedCardIds(new Set(s.requeuedCardIds ?? []))
+    setPassedConceptIds(new Set(s.passedConceptIds ?? []))
     setAnswerResult(s.answerResult ?? null)
     setSubmitError(null)
     setSubmitPending(false)
@@ -173,6 +177,7 @@ export default function App() {
       setSessionIndex(0)
       setSessionResults([])
       setRequeuedCardIds(new Set())
+      setPassedConceptIds(new Set())
       setAnswerResult(null)
       setSubmitError(null)
       setSubmitPending(false)
@@ -335,7 +340,12 @@ export default function App() {
       case 'upload': return <S_Upload upload={hasBackend ? importZip : undefined} onBack={() => setScreen('home')} onDone={onUploaded} />
       case 'examdate': return <S_ExamDate trackTitle={examTrack?.title ?? '토익'} initialISO={editingExam ? selected?.examDate ?? null : null} onSave={onExamSave} onCancel={editingExam ? onExamCancel : undefined} />
       // 세션 플로우(목업, 스케줄러 연결 전): 개념 → 다지기 → 채점 → 완료
-      case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} onExplain={hasBackend && selected && currentItem ? (ex) => gradeExplanation(selected.id, currentItem.conceptId, ex) : undefined} />
+      case 'concept': return <S_Concept item={currentItem} done={done} total={totalItems} passed={!!currentItem && (currentItem.conceptPassed || passedConceptIds.has(currentItem.conceptId))} onClose={() => setScreen('dashboard')} onNext={() => setScreen('quiz')} onExplain={hasBackend && selected && currentItem ? async (ex) => {
+        const fb = await gradeExplanation(selected.id, currentItem.conceptId, ex)
+        // 통과 시 같은 개념의 다른 카드도 이번 세션에선 게이트 없이 진행 가능하도록 기록.
+        if (fb.sufficient && currentItem.conceptId) setPassedConceptIds((prev) => new Set(prev).add(currentItem.conceptId))
+        return fb
+      } : undefined} />
       case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} onSuspend={hasBackend && selected && currentItem ? () => { void suspendCurrentCard() } : undefined} />
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} onSuspend={hasBackend && selected && currentItem ? () => { void suspendCurrentCard() } : undefined} />
       case 'summary': return <S_Summary results={sessionResults} completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onReviewAgain={hasAgainReview ? startAgainReview : undefined} onDone={() => setScreen('dashboard')} />

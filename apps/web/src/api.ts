@@ -25,7 +25,7 @@ export type TrackStats = {
 export type SessionItem = {
   stateId: string; cardId: string; conceptId: string; mode: 'new' | 'review'; type: string
   prompt: string; answer: string; explanation: string; hint: string | null; distractors: string[]
-  conceptTitle: string; conceptBodyMd: string
+  conceptTitle: string; conceptBodyMd: string; conceptPassed: boolean
 }
 export type SessionQueue = { trackId: string; total: number; items: SessionItem[] }
 export type AnswerResult = {
@@ -88,7 +88,8 @@ export async function getSession(id: string, opts: { extra?: boolean } = {}): Pr
   return (await res.json() as { session: SessionQueue }).session
 }
 
-// POST /tracks/:id/concept/:conceptId/explain — 자기설명("왜?") LLM 피드백. 게이트 아님(언제든 진행 가능).
+// POST /tracks/:id/concept/:conceptId/explain — 자기설명("왜?") LLM 피드백.
+// 미통과 개념의 다지기 게이트: LLM 통과 판정 시 서버가 통과를 영속화(다음부터 conceptPassed=true).
 export type ExplainFeedback = { sufficient: boolean; feedback: string; mode?: string }
 export async function gradeExplanation(trackId: string, conceptId: string, explanation: string): Promise<ExplainFeedback> {
   const res = await authedFetch(`/tracks/${trackId}/concept/${conceptId}/explain`, {

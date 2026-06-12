@@ -40,8 +40,10 @@ function plainMd(s: string): string {
   return s.replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim()
 }
 
-export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExplain }: {
+export function S_Concept({ item, done = 0, total = 42, passed = false, onClose, onNext, onExplain }: {
   item?: SessionItem; done?: number; total?: number; onClose?: () => void; onNext?: () => void
+  // 이미 자기설명 게이트를 통과한 개념인가(통과분은 바로 다지기로 진행 가능).
+  passed?: boolean
   // 백엔드 모드에서만 제공 — 실제 LLM 자기설명 피드백. 미제공이면(데모) 목업 렌더.
   onExplain?: (explanation: string) => Promise<ExplainFeedback>
 }) {
@@ -50,6 +52,11 @@ export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExpla
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const demo = !onExplain
+  // 게이트: 백엔드 모드 + 미통과 개념은 LLM 통과 전까지 다지기로 못 넘어간다.
+  // 이미 통과(passed)했거나 이번에 통과(fb.sufficient)하면 진행 가능. 데모는 게이트 없음.
+  const gateActive = !demo && !passed
+  const passedNow = passed || (fb?.sufficient ?? false)
+  const canProceed = !gateActive || (fb?.sufficient ?? false)
   const conceptTitle = item?.conceptTitle ?? '현재완료 vs 과거시제'
   const conceptBody = item ? plainMd(item.conceptBodyMd) : '현재완료는 과거의 사건이 지금에 영향을 줄 때. 과거시제는 현재와 단절된 한 시점.'
 
@@ -66,7 +73,12 @@ export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExpla
       <SessHead done={done} total={total} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
         <Chip tone="neutral">개념</Chip>
-        <div style={{ fontSize: 23, fontWeight: 700, marginTop: 16, lineHeight: 1.3 }}>{conceptTitle}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
+          <div style={{ fontSize: 23, fontWeight: 700, lineHeight: 1.3 }}>{conceptTitle}</div>
+          {passedNow && (
+            <span title="자기설명 통과" style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 11, background: TONE.ok.bg, color: TONE.ok.c, border: `1px solid ${TONE.ok.c}`, fontSize: 13, fontWeight: 800, lineHeight: 1 }}>✓</span>
+          )}
+        </div>
         <div style={{ marginTop: 18, fontSize: 14.5, lineHeight: 1.65, color: WF.ink }}>
           <b>핵심.</b> {conceptBody}
         </div>
@@ -117,12 +129,37 @@ export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExpla
             </>
           )}
         </div>
-        {/* 자기설명은 권장 단계일 뿐 게이트가 아니다 — 학습은 언제나 진행 가능. */}
+        {/* 게이트: 미통과 개념은 자기설명이 LLM 통과 판정을 받아야 다지기로 넘어갈 수 있다.
+            이미 통과한 개념이거나 데모 모드면 바로 진행 가능. */}
         <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-          <Btn primary onClick={onNext}>다지기 시작 ›</Btn>
+          {gateActive && !canProceed && (
+            <div style={{ fontSize: 12.5, color: WF.ink3, textAlign: 'center', marginBottom: 10, lineHeight: 1.5 }}>
+              먼저 개념을 자신의 언어로 설명하고 피드백을 통과하면 다지기를 시작할 수 있어요.
+            </div>
+          )}
+          <Btn primary disabled={!canProceed} onClick={onNext}>다지기 시작 ›</Btn>
         </div>
       </Body>
     </Screen>
+  )
+}
+
+// 힌트 — 기본 숨김, "힌트 보기" 클릭 시 펼침. 힌트가 없으면 가짜 버튼을 띄우지 않고 아예 숨긴다.
+function HintReveal({ hint }: { hint?: string | null }) {
+  const [open, setOpen] = useState(false)
+  if (!hint) return null
+  return (
+    <div style={{ marginTop: 18 }}>
+      {open ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, color: WF.ink2, fontSize: 13, lineHeight: 1.55 }}>
+          <span style={{ fontSize: 14, flex: '0 0 auto' }}>💡</span><span>{hint}</span>
+        </div>
+      ) : (
+        <span onClick={() => setOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: WF.ink3, fontSize: 13, cursor: 'pointer' }}>
+          <span style={{ fontSize: 14 }}>💡</span><span style={{ borderBottom: `1px dashed ${WF.lineStrong}` }}>힌트 보기</span>
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -175,9 +212,7 @@ export function S_Quiz({ item, done = 24, total = 42, submitting = false, error,
         />
         {error && <div style={{ marginTop: 10, fontSize: 12.5, color: TONE.danger.c, lineHeight: 1.45 }}>{error}</div>}
         <div style={{ marginTop: 14 }}><Btn primary disabled={!canSubmit} onClick={() => onSubmit?.(answer)}>{submitting ? '채점 중…' : '제출'}</Btn></div>
-        <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
-          <span style={{ fontSize: 14 }}>💡</span><span>{item?.hint ?? '힌트 보기'}</span>
-        </div>
+        <HintReveal hint={item ? item.hint : '현재완료는 since/for와 함께 「현재까지 이어짐」을 나타내요.'} />
         <SuspendLink onSuspend={onSuspend} />
       </Body>
     </Screen>
