@@ -83,7 +83,7 @@ export async function getTrackStats(userId: string, trackId: string, now = new D
   if (!track) return null
 
   const [states, logs] = await Promise.all([
-    db.collection<StateDoc>('cardStates').find({ userId, trackId: _id, archived: { $ne: true } }).toArray(),
+    db.collection<StateDoc>('cardStates').find({ userId, trackId: _id, archived: { $ne: true }, triaged: { $ne: true } }).toArray(),
     db.collection<LogDoc>('reviewLogs').find({ userId, trackId: _id }).toArray(),
   ])
   const logLikes: ReviewLogLike[] = logs.map((l) => ({

@@ -8,7 +8,7 @@ import { validateTrackPatch, updateTrack, deleteTrack, listTracks, type TrackPat
 import { getTrackPlan } from './plan.js'
 import { getTrackStats } from './stats.js'
 import { getTrackSnapshots } from './snapshots.js'
-import { getSessionQueue, submitSessionAnswer, type AnswerInput } from './session.js'
+import { getSessionQueue, submitSessionAnswer, suspendSessionCard, type AnswerInput } from './session.js'
 import { getExplanationFeedback } from './explain.js'
 
 export const tracks = new Hono<{ Variables: AuthVars }>()
@@ -64,6 +64,19 @@ tracks.post('/:id/session/answer', requireAuth, async (c) => {
   })
   if (!result) return c.json({ error: 'card not found' }, 404)
   return c.json({ ok: true, result })
+})
+
+// 다시 안 보기 — 오류가 있는 문제를 세션·스케줄에서 영구 제외(triaged).
+tracks.post('/:id/session/suspend', requireAuth, async (c) => {
+  let body: unknown
+  try { body = await c.req.json() } catch { return c.json({ error: 'invalid JSON body' }, 400) }
+  const stateId = (body as { stateId?: unknown }).stateId
+  if (typeof stateId !== 'string' || !stateId) {
+    return c.json({ error: 'invalid stateId', errors: ['stateId required'] }, 400)
+  }
+  const ok = await suspendSessionCard(c.get('userId'), c.req.param('id') ?? '', stateId)
+  if (!ok) return c.json({ error: 'card state not found' }, 404)
+  return c.json({ ok: true })
 })
 
 // 개념 자기설명("왜?") 피드백 — LLM 코치가 핵심을 담았는지 판정 + 한국어 피드백. 게이트 아님.

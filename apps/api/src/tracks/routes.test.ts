@@ -14,6 +14,7 @@ import { zipSync, strToU8 } from 'fflate'
 import app from '../app.js'
 import { connectMongo, closeMongo, getDb } from '../db/mongo.js'
 import { signAccess } from '../auth/jwt.js'
+import { config } from '../config.js'
 import { importBundle, type SoulBundle } from './import.js'
 
 let mongod: MongoMemoryServer
@@ -270,7 +271,8 @@ describe('POST /tracks/:id/session/answer', () => {
     const { result } = await res.json() as { result: { grade: string; score: number; stage: string; answer: string; graderMode: string } }
     expect(result.grade).toBe('good')
     expect(result.score).toBe(1)
-    expect(result.graderMode).toBe('exact')
+    // 테스트 환경엔 GEMINI_API_KEY가 없어 관대 폴백(정답 처리)으로 채점된다.
+    expect(result.graderMode).toBe('fallback')
     expect(result.stage).toBe('consolidating')
     expect(result.answer).toBe('a')
 
@@ -280,10 +282,10 @@ describe('POST /tracks/:id/session/answer', () => {
     expect(state?.S).toBeGreaterThan(0)
     expect(state?.lastGrade).toBe('good')
     const log = await getDb().collection('reviewLogs').findOne({ userId: USER, trackId: trackObjectId })
-    expect(log?.graderMode).toBe('exact')
+    expect(log?.graderMode).toBe('fallback')
   })
 
-  it('오답 제출 → lapse 증가 + again', async () => {
+  it('오답 제출 → lapse 증가 + again (LLM 저점수 모킹)', async () => {
     const b = bundle()
     b.manifest.trackSlug = '오답제출'
     b.manifest.title = '오답제출'
@@ -293,19 +295,88 @@ describe('POST /tracks/:id/session/answer', () => {
     const { session } = await sessionRes.json() as { session: { items: { stateId: string; cardId: string }[] } }
     const item = session.items[0]
 
-    const res = await app.request(`/tracks/${trackId}/session/answer`, {
-      method: 'POST',
-      headers: { authorization: await bearer(USER), 'content-type': 'application/json' },
-      body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'wrong' }),
-    })
-    expect(res.status).toBe(200)
-    const { result } = await res.json() as { result: { grade: string; score: number } }
-    expect(result.grade).toBe('again')
-    expect(result.score).toBe(0)
+    // 채점은 LLM 전용 — 키를 주입하고 Gemini가 0점을 반환하도록 모킹해 again 경로를 검증한다.
+    const prevKey = config.grader.apiKey
+    config.grader.apiKey = 'test-key'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ score: 0, reason: '핵심 개념이 틀렸어요.' }) }] } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })))
+
+    try {
+      const res = await app.request(`/tracks/${trackId}/session/answer`, {
+        method: 'POST',
+        headers: { authorization: await bearer(USER), 'content-type': 'application/json' },
+        body: JSON.stringify({ stateId: item.stateId, cardId: item.cardId, answer: 'wrong' }),
+      })
+      expect(res.status).toBe(200)
+      const { result } = await res.json() as { result: { grade: string; score: number; graderMode: string } }
+      expect(result.grade).toBe('again')
+      expect(result.score).toBe(0)
+      expect(result.graderMode).toBe('llm')
+    } finally {
+      vi.unstubAllGlobals()
+      config.grader.apiKey = prevKey
+    }
 
     const state = await getDb().collection('cardStates').findOne({ userId: USER, trackId: new ObjectId(trackId) })
     expect(state?.lapses).toBe(1)
     expect(state?.lastGrade).toBe('again')
+  })
+
+  it('다시 안 보기 → triaged 세팅 + 다음 세션에서 제외', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '다시안보기'
+    b.manifest.title = '다시안보기'
+    b.examDate = '2026-07-15'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    const s1 = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const { session } = await s1.json() as { session: { total: number; items: { stateId: string; cardId: string }[] } }
+    expect(session.total).toBeGreaterThan(0)
+    const item = session.items[0]
+
+    const p1 = await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    const { plan: planBefore } = await p1.json() as { plan: { total: number; todayTotal: number } }
+
+    const res = await app.request(`/tracks/${trackId}/session/suspend`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: item.stateId }),
+    })
+    expect(res.status).toBe(200)
+
+    const state = await getDb().collection('cardStates').findOne({ _id: new ObjectId(item.stateId) })
+    expect(state?.triaged).toBe(true)
+
+    // 다음 세션 큐에서 빠진다.
+    const s2 = await app.request(`/tracks/${trackId}/session`, { headers: auth })
+    const { session: after } = await s2.json() as { session: { items: { stateId: string }[] } }
+    expect(after.items.some((i) => i.stateId === item.stateId)).toBe(false)
+
+    // 플랜 집계(total·todayTotal)에서도 제외돼야 — 막다른 시작 버튼/도달 불가 100% 방지.
+    const p2 = await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    const { plan: planAfter } = await p2.json() as { plan: { total: number; todayTotal: number } }
+    expect(planAfter.total).toBe(planBefore.total - 1)
+    expect(planAfter.todayTotal).toBe(planBefore.todayTotal - 1)
+  })
+
+  it('다시 안 보기 — stateId 누락 400, 없는 카드 404', async () => {
+    const b = bundle()
+    b.manifest.trackSlug = '다시안보기2'
+    b.manifest.title = '다시안보기2'
+    const { trackId } = await importBundle(USER, b)
+    const auth = { authorization: await bearer(USER) }
+
+    const bad = await app.request(`/tracks/${trackId}/session/suspend`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({}),
+    })
+    expect(bad.status).toBe(400)
+
+    const missing = await app.request(`/tracks/${trackId}/session/suspend`, {
+      method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ stateId: new ObjectId().toString() }),
+    })
+    expect(missing.status).toBe(404)
   })
 })
 
