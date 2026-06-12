@@ -178,14 +178,14 @@ export function S_Empty({ onAdd, onNav }: { onAdd?: () => void; onNav?: (t: 'hom
 
 // 2. 트랙 대시보드. track 제공 시 실데이터(정직 — 가짜 건강/진도 없이 스케줄러 대기
 // 안내), 미제공 시 데모 목업.
-export function S_Dashboard({ track, defaultInfo = false, onStart, onEdit, onBack }: {
-  track?: Track; defaultInfo?: boolean; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void
+export function S_Dashboard({ track, defaultInfo = false, resumable = false, onResume, onStart, onEdit, onBack }: {
+  track?: Track; defaultInfo?: boolean; resumable?: boolean; onResume?: () => void; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void
 }) {
-  if (track) return <RealDashboard track={track} onStart={onStart} onEdit={onEdit} onBack={onBack} />
+  if (track) return <RealDashboard track={track} resumable={resumable} onResume={onResume} onStart={onStart} onEdit={onEdit} onBack={onBack} />
   return <DemoDashboard defaultInfo={defaultInfo} onStart={onStart} onEdit={onEdit} onBack={onBack} />
 }
 
-function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void }) {
+function RealDashboard({ track, resumable = false, onResume, onStart, onEdit, onBack }: { track: Track; resumable?: boolean; onResume?: () => void; onStart?: (extra?: boolean) => void; onEdit?: () => void; onBack?: () => void }) {
   const [plan, setPlan] = useState<TrackPlan | null>(null)
   const [info, setInfo] = useState(false)
   // 세션 완료 후 대시보드 복귀 시 화면 전환으로 이 컴포넌트가 remount → getPlan 재호출 → 갱신된 숫자 반영.
@@ -231,21 +231,37 @@ function RealDashboard({ track, onStart, onEdit, onBack }: { track: Track; onSta
                 <span>개념 {plan.todayNew} · 다지기 {plan.todayReview}</span>
                 <span style={{ color: WF.ink2, fontFamily: WF.mono, fontSize: 12 }}>예상 {plan.estMinutes}분</span>
               </div>
+              {/* 진척률 — 한 번이라도 푼 카드(studied) 기준이라 한 문항마다 즉시 움직이고 영속된다. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Bar pct={plan.progressPct} dark /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>{plan.mastered}/{plan.total}</span>
+                <Bar pct={plan.studiedPct} dark /><span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink2 }}>{plan.studied}/{plan.total}</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: WF.ink3, marginTop: 6, fontFamily: WF.mono }}>
+                학습 {plan.studiedPct}% · 숙달 {plan.mastered}/{plan.total}
               </div>
             </div>
 
             {/* 학습은 언제나 가능 — 오늘 할당량이 있으면 일반 시작, 없으면(소진/실현 어려움) 추가 학습. */}
             <div style={{ marginTop: 'auto' }}>
+              {/* 진행 중이던 세션이 있으면 이어서 학습 — 새로고침·이탈에도 보존된다. */}
+              {resumable && (
+                <div style={{ marginBottom: 10 }}>
+                  <Btn primary onClick={onResume}>↻  이어서 학습하기</Btn>
+                  <div style={{ fontFamily: WF.mono, fontSize: 11, color: WF.ink3, textAlign: 'center', marginTop: 6 }}>
+                    지난 학습이 진행 중이에요
+                  </div>
+                </div>
+              )}
+              {/* 이어서 버튼이 있으면 새 시작은 보조(ghost)로 위계를 낮춘다. */}
               {plan.todayTotal > 0
-                ? <Btn primary onClick={() => onStart?.(false)}>▶  오늘 학습 시작 ({plan.todayTotal}문항)</Btn>
+                ? <Btn primary={!resumable} ghost={resumable} onClick={() => onStart?.(false)}>{resumable ? `↺  처음부터 새로 (${plan.todayTotal})` : `▶  오늘 학습 시작 (${plan.todayTotal}문항)`}</Btn>
                 : (
                   <>
-                    <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center', marginBottom: 10 }}>
-                      {plan.suspendNew && !plan.feasible ? '남은 기간이 빠듯해 신규 도입은 잠시 멈췄어요' : '오늘 할당량을 모두 끝냈어요 ✓'}
-                    </div>
-                    <Btn primary onClick={() => onStart?.(true)}>＋  추가 학습 시작</Btn>
+                    {!resumable && (
+                      <div style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, textAlign: 'center', marginBottom: 10 }}>
+                        {plan.suspendNew && !plan.feasible ? '남은 기간이 빠듯해 신규 도입은 잠시 멈췄어요' : '오늘 할당량을 모두 끝냈어요 ✓'}
+                      </div>
+                    )}
+                    <Btn primary={!resumable} ghost={resumable} onClick={() => onStart?.(true)}>＋  추가 학습 시작</Btn>
                   </>
                 )}
             </div>

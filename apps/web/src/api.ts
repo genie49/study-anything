@@ -10,6 +10,7 @@ export type HealthState = 'no_exam' | 'on_track' | 'behind_overload' | 'behind_m
 export type TrackPlan = {
   examSet: boolean; daysLeft: number | null; health: HealthState; suspendNew: boolean
   total: number; mastered: number; progressPct: number
+  studied: number; studiedPct: number
   todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
   backlog: number; newRemaining: number; feasible: boolean
 }
@@ -29,7 +30,7 @@ export type SessionItem = {
 export type SessionQueue = { trackId: string; total: number; items: SessionItem[] }
 export type AnswerResult = {
   cardId: string; score: number; grade: 'again' | 'hard' | 'good' | 'easy'; correct: boolean
-  graderMode: 'llm' | 'mcq' | 'exact'
+  graderMode: 'llm' | 'fallback'
   reason: string; answer: string; explanation: string; dueAt: string; stage: string
 }
 
@@ -97,6 +98,16 @@ export async function gradeExplanation(trackId: string, conceptId: string, expla
   })
   if (!res.ok) throw new Error(`자기설명 피드백 실패 (${await errorMessage(res)})`)
   return (await res.json() as { feedback: ExplainFeedback }).feedback
+}
+
+// POST /tracks/:id/session/suspend — "다시 안 보기": 오류 문제를 세션·스케줄에서 영구 제외.
+export async function suspendCard(trackId: string, stateId: string): Promise<void> {
+  const res = await authedFetch(`/tracks/${trackId}/session/suspend`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ stateId }),
+  })
+  if (!res.ok) throw new Error(`다시 안 보기 실패 (${await errorMessage(res)})`)
 }
 
 // POST /tracks/:id/session/answer — 답안 제출 + 상태 갱신.

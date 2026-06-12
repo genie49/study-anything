@@ -124,6 +124,18 @@ export async function getSessionQueue(
   return { trackId, total: items.length, items }
 }
 
+// "다시 안 보기" — 오류가 있는 문제를 세션·스케줄에서 영구 제외(triaged=true).
+// 세션 쿼리가 triaged를 필터링하므로 이후 큐에 다시 뜨지 않는다. 복습/lapse로 집계되지 않는다.
+export async function suspendSessionCard(userId: string, trackId: string, stateId: string, now = new Date()): Promise<boolean> {
+  if (!ObjectId.isValid(trackId) || !ObjectId.isValid(stateId)) return false
+  const db = getDb()
+  const res = await db.collection('cardStates').updateOne(
+    { _id: new ObjectId(stateId), userId, trackId: new ObjectId(trackId) },
+    { $set: { triaged: true, triagedAt: now } },
+  )
+  return res.matchedCount > 0
+}
+
 export type AnswerInput = {
   stateId: string
   cardId: string
@@ -162,7 +174,7 @@ export async function submitSessionAnswer(userId: string, trackId: string, input
   ])
   if (!track || !state || !card) return null
 
-  const graded = await gradeCardAnswer(card as { type?: string; prompt?: string; answer?: string; explanation?: string; grading?: Record<string, unknown> | null }, input.answer)
+  const graded = await gradeCardAnswer(card as { type?: string; prompt?: string; answer?: string; explanation?: string; distractors?: string[]; grading?: Record<string, unknown> | null }, input.answer)
   const prevS = state.S ?? 0
   const prevD = state.D ?? 0.3
   const prevReps = state.reps ?? 0

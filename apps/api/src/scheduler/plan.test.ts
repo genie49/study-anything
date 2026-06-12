@@ -23,6 +23,18 @@ describe('computeTrackPlan', () => {
     expect(p.todayNew).toBeGreaterThan(0)
     expect(p.todayNew).toBeLessThanOrEqual(20)
     expect(p.progressPct).toBe(0)
+    expect(p.studied).toBe(0)      // reps=0 → 아직 안 푼 카드
+    expect(p.studiedPct).toBe(0)
+  })
+
+  it('한 번이라도 푼 카드(reps>0)가 studied/studiedPct에 즉시 반영', () => {
+    // 신규 5 + 복습 5(reps=3, 미숙달) → studied=5, total=10 → 50%
+    const states = [...Array.from({ length: 5 }, mkNew), ...Array.from({ length: 5 }, () => mkReview(1))]
+    const p = computeTrackPlan(states, { now: NOW, examDate: EXAM })
+    expect(p.total).toBe(10)
+    expect(p.studied).toBe(5)
+    expect(p.studiedPct).toBe(50)
+    expect(p.mastered).toBe(0)     // 숙달과는 별개 — studied가 먼저 움직인다
   })
 
   it('시험 미설정 → no_exam · daysLeft null · 신규 중단', () => {

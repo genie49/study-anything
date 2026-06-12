@@ -126,9 +126,31 @@ export function S_Concept({ item, done = 0, total = 42, onClose, onNext, onExpla
   )
 }
 
+// 오류 문제를 영구 제외하는 "다시 안 보기" 텍스트 버튼. 실수 방지를 위해 1회 확인 후 실행.
+function SuspendLink({ onSuspend }: { onSuspend?: () => void }) {
+  const [armed, setArmed] = useState(false)
+  if (!onSuspend) return null
+  return (
+    <div style={{ marginTop: 16, textAlign: 'center' }}>
+      {armed ? (
+        <span style={{ fontSize: 12.5, color: WF.ink2 }}>
+          이 문제를 다시 보지 않을까요?{' '}
+          <span onClick={onSuspend} style={{ color: TONE.danger.c, fontWeight: 700, cursor: 'pointer' }}>제외</span>
+          {' · '}
+          <span onClick={() => setArmed(false)} style={{ color: WF.ink3, cursor: 'pointer' }}>취소</span>
+        </span>
+      ) : (
+        <span onClick={() => setArmed(true)} style={{ fontSize: 12.5, color: WF.ink3, cursor: 'pointer' }}>
+          🚫 이 문제 다시 안 보기
+        </span>
+      )}
+    </div>
+  )
+}
+
 // 5. 다지기 (입력형)
-export function S_Quiz({ item, done = 24, total = 42, submitting = false, error, onClose, onSubmit }: {
-  item?: SessionItem; done?: number; total?: number; submitting?: boolean; error?: string | null; onClose?: () => void; onSubmit?: (answer: string) => void
+export function S_Quiz({ item, done = 24, total = 42, submitting = false, error, onClose, onSubmit, onSuspend }: {
+  item?: SessionItem; done?: number; total?: number; submitting?: boolean; error?: string | null; onClose?: () => void; onSubmit?: (answer: string) => void; onSuspend?: () => void
 }) {
   const [answer, setAnswer] = useState(item ? '' : 'has lived')
   const canSubmit = answer.trim().length > 0 && !submitting
@@ -156,6 +178,7 @@ export function S_Quiz({ item, done = 24, total = 42, submitting = false, error,
         <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 7, color: WF.ink2, fontSize: 13 }}>
           <span style={{ fontSize: 14 }}>💡</span><span>{item?.hint ?? '힌트 보기'}</span>
         </div>
+        <SuspendLink onSuspend={onSuspend} />
       </Body>
     </Screen>
   )
@@ -202,8 +225,8 @@ export function S_Grading({ onClose }: { onClose?: () => void }) {
 }
 
 // 6. 채점 결과
-export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial', onClose, onNext }: {
-  answerResult?: AnswerResult; done?: number; total?: number; result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void
+export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial', onClose, onNext, onSuspend }: {
+  answerResult?: AnswerResult; done?: number; total?: number; result?: 'correct' | 'partial' | 'wrong'; onClose?: () => void; onNext?: () => void; onSuspend?: () => void
 }) {
   const R: Record<string, { tone: Tone; score: string; fill: number; label: string; reason: string }> = {
     correct: { tone: 'ok', score: '1.0', fill: 100, label: '정답', reason: '시제와 since 뒤 기간 해석까지 정확해요.' },
@@ -220,7 +243,7 @@ export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial
   const reason = answerResult?.reason ?? r.reason
   const referenceAnswer = answerResult?.answer ?? 'has lived'
   const explanation = answerResult?.explanation ?? 'since + 기간 → 현재완료. 과거형은 현재와 단절됩니다.'
-  const modeLabel = answerResult?.graderMode === 'llm' ? 'LLM 채점' : answerResult?.graderMode === 'mcq' ? 'mcq 채점' : answerResult ? 'exact 채점' : 'LLM 채점'
+  const modeLabel = 'LLM 채점'
   return (
     <Screen>
       <SessHead done={done} total={total} onClose={onClose} />
@@ -253,6 +276,7 @@ export function S_Grade({ answerResult, done = 25, total = 42, result = 'partial
             ))}
           </div>
         </div>
+        <SuspendLink onSuspend={onSuspend} />
         <div style={{ marginTop: 'auto', paddingTop: 16 }}><Btn primary onClick={onNext}>다음 ›</Btn></div>
       </Body>
     </Screen>

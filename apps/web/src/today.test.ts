@@ -6,6 +6,7 @@ import type { Track, TrackPlan, HealthState } from './api'
 const track = (id: string): Track => ({ id, trackSlug: id, title: id, examDate: '2026-07-15', status: 'active' })
 const plan = (p: Partial<TrackPlan> & { health: HealthState; todayTotal: number }): TrackPlan => ({
   examSet: true, daysLeft: 30, suspendNew: false, total: 10, mastered: 0, progressPct: 0,
+  studied: 0, studiedPct: 0,
   todayNew: 0, todayReview: 0, estMinutes: 0, backlog: 0, newRemaining: 0, feasible: true,
   ...p,
 })

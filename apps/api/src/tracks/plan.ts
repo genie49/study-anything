@@ -11,7 +11,9 @@ export async function getTrackPlan(userId: string, trackId: string, now = new Da
   const track = await db.collection('tracks').findOne({ _id, userId })
   if (!track) return null
 
-  const rows = await db.collection('cardStates').find({ userId, trackId: _id, archived: { $ne: true } }).toArray()
+  // triaged(다시 안 보기)는 세션 큐와 동일하게 플랜 집계에서도 제외 — 그래야 todayTotal/total/studied가
+  // 실제 세션과 일치한다(제외 카드가 남으면 막다른 시작 버튼·도달 불가 100% 발생).
+  const rows = await db.collection('cardStates').find({ userId, trackId: _id, archived: { $ne: true }, triaged: { $ne: true } }).toArray()
   const states: CardStateLike[] = rows.map((s) => ({
     stage: (s.stage as string) ?? 'new',
     S: (s.S as number) ?? 0,
