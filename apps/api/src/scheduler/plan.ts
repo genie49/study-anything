@@ -29,7 +29,9 @@ export type TrackPlan = {
   suspendNew: boolean
   total: number
   mastered: number
-  progressPct: number       // mastered/total
+  progressPct: number       // mastered/total — 숙달 기준(장기 보유 신호)
+  studied: number           // 한 번이라도 푼 카드(reps>0)
+  studiedPct: number        // studied/total — 한 문항마다 즉시 움직이는 진척률
   // 오늘 할 일
   todayNew: number          // 개념(신규 도입)
   todayReview: number       // 다지기(복습)
@@ -60,6 +62,7 @@ export function computeTrackPlan(states: CardStateLike[], opts: PlanOptions): Tr
   const newCards = active.filter((s) => isNew(s) && !isMastered(s))
   const reviewCards = active.filter((s) => !isNew(s) && !isMastered(s))
   const mastered = active.filter(isMastered).length
+  const studied = active.filter((s) => s.reps > 0).length
 
   const dueReview = reviewCards.filter((s) => s.dueAt.getTime() <= now.getTime())
   const backlog = reviewCards.filter((s) => s.dueAt.getTime() < todayStart.getTime()).length
@@ -110,6 +113,8 @@ export function computeTrackPlan(states: CardStateLike[], opts: PlanOptions): Tr
     total,
     mastered,
     progressPct: total > 0 ? Math.round((mastered / total) * 100) : 0,
+    studied,
+    studiedPct: total > 0 ? Math.round((studied / total) * 100) : 0,
     todayNew, todayReview, todayTotal, estMinutes,
     backlog, newRemaining,
     feasible: feas.feasible,

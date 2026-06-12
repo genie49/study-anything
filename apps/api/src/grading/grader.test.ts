@@ -8,17 +8,25 @@ describe('gradeCardAnswer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('mcq는 LLM 없이 동등비교', async () => {
-    const r = await gradeCardAnswer({ type: 'mcq', answer: 'A', explanation: 'e' }, 'A', { apiKey: 'unused' })
-    expect(r.mode).toBe('mcq')
+  it('apiKey가 없으면 관대 폴백(오답 강등 금지)', async () => {
+    const r = await gradeCardAnswer(qa, '아무 답', { apiKey: '' })
+    expect(r.mode).toBe('fallback')
     expect(r.grade).toBe('good')
-    expect(r.score).toBe(1)
+    expect(r.correct).toBe(true)
   })
 
-  it('apiKey가 없으면 exact 폴백', async () => {
-    const r = await gradeCardAnswer(qa, 'has lived', { apiKey: '' })
-    expect(r.mode).toBe('exact')
+  it('mcq도 LLM으로 채점하며 선택지를 전달한다', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ score: 1, reason: '정답 보기를 골랐어요.' }) }] } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await gradeCardAnswer({ type: 'mcq', answer: 'A', distractors: ['B', 'C'], explanation: 'e' }, 'A', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
+    expect(r.mode).toBe('llm')
     expect(r.grade).toBe('good')
+    const sent = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)
+    const payload = JSON.parse(sent.contents[0].parts[0].text)
+    expect(payload.options).toEqual(['A', 'B', 'C'])
   })
 
   it('Gemini JSON 점수를 grade로 매핑', async () => {
@@ -34,10 +42,25 @@ describe('gradeCardAnswer', () => {
     expect(r.reason).toContain('거의')
   })
 
-  it('Gemini 실패 시 exact 폴백', async () => {
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('nope', { status: 500 })))
+  it('Gemini 연속 실패 시 관대 폴백(오답 강등 금지)', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response('nope', { status: 500 })))
     const r = await gradeCardAnswer(qa, 'wrong', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
-    expect(r.mode).toBe('exact')
-    expect(r.grade).toBe('again')
+    expect(r.mode).toBe('fallback')
+    expect(r.grade).toBe('good')
+    expect(r.correct).toBe(true)
+  })
+
+  it('Gemini 1회 실패 후 재시도 성공', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('nope', { status: 500 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ score: 1, reason: '정답이에요.' }) }] } }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await gradeCardAnswer(qa, 'has lived', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
+    expect(r.mode).toBe('llm')
+    expect(r.grade).toBe('good')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

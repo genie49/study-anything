@@ -1,15 +1,18 @@
-// 런타임 채점기 — mcq는 결정적 비교, 나머지는 Gemini LLM 사용 후 실패 시 exact 폴백.
-// runtime-grading.md: LLM은 참조정답/해설을 적용만 하며 콘텐츠를 생성하지 않는다.
+// 런타임 채점기 — 모든 유형을 Gemini LLM으로 채점한다(코드 동등비교 폐기).
+// 사용자 요구: "채점은 모두 llm으로". exact 동등비교는 철자·동의어·패러프레이즈를 오답으로
+// 과처리하므로 제거했다. LLM 호출 실패/키 부재 시에도 오답으로 강등하지 않고 관대하게 통과시킨다
+// (false negative가 학습 동기를 해치는 쪽이 false positive보다 나쁘다 — 장애는 드물다).
 import { config } from '../config.js'
 import type { Grade } from '../scheduler/memory.js'
 
-export type GraderMode = 'llm' | 'mcq' | 'exact'
+export type GraderMode = 'llm' | 'fallback'
 
 export type GradeableCard = {
   type?: string
   prompt?: string
   answer?: string
   explanation?: string
+  distractors?: string[]
   grading?: Record<string, unknown> | null
 }
 
@@ -27,10 +30,6 @@ export type GraderOptions = {
   timeoutMs?: number
 }
 
-function normalizeAnswer(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
 function scoreToGrade(score: number): Grade {
   if (score >= 0.85) return 'good'
   if (score >= 0.5) return 'hard'
@@ -42,18 +41,14 @@ function clampScore(n: unknown): number {
   return Math.max(0, Math.min(1, v))
 }
 
-function exactGrade(card: GradeableCard, learnerAnswer: string, mode: GraderMode): GradedAnswer {
-  const expected = normalizeAnswer(card.answer ?? '')
-  const actual = normalizeAnswer(learnerAnswer)
-  const correct = !!expected && actual === expected
+// LLM을 쓸 수 없을 때(키 부재·연속 실패) 관대 폴백 — 오답으로 처리하지 않는다.
+function lenientFallback(): GradedAnswer {
   return {
-    score: correct ? 1 : 0,
-    grade: correct ? 'good' : 'again',
-    correct,
-    mode,
-    reason: correct
-      ? '정답이에요. 참조 정답과 일치합니다.'
-      : '아직 달라요. 정답과 해설을 보고 다시 떠올려 보세요.',
+    score: 1,
+    grade: 'good',
+    correct: true,
+    mode: 'fallback',
+    reason: '채점기를 일시적으로 사용할 수 없어 정답으로 처리했어요. 정답·해설을 확인해 주세요.',
   }
 }
 
@@ -70,6 +65,10 @@ function parseGeminiJson(body: unknown): { score: number; reason: string } {
 
 async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Required<GraderOptions>): Promise<GradedAnswer> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`
+  // mcq는 선택지(정답+오답)를 함께 줘 LLM이 보기 중 무엇을 골랐는지 판단할 수 있게 한다.
+  const options = card.type === 'mcq' && Array.isArray(card.distractors)
+    ? [card.answer ?? '', ...card.distractors].filter(Boolean)
+    : undefined
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -81,8 +80,10 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
           text: JSON.stringify({
             task: 'grade retrieval answer',
             lang: 'ko',
+            type: card.type ?? 'qa',
             question: card.prompt ?? '',
             referenceAnswer: card.answer ?? '',
+            options,
             explanation: card.explanation ?? '',
             rubric: Array.isArray(card.grading?.rubric) ? card.grading?.rubric : [],
             learnerAnswer,
@@ -104,9 +105,10 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
       systemInstruction: {
         parts: [{
           text: [
-            '너는 학습앱의 엄격하지만 공정한 채점관이다.',
-            '질문, 참조정답, 해설, 선택 채점기준, 학습자답변을 보고 0~1 점수를 매긴다.',
-            '철자, 띄어쓰기, 동의어, 패러프레이즈는 관대하게 보되 핵심 개념의 정오는 엄격하게 본다.',
+            '너는 학습앱의 공정한 채점관이다.',
+            '질문, 참조정답, (mcq면)선택지, 해설, 선택 채점기준, 학습자답변을 보고 0~1 점수를 매긴다.',
+            '철자, 띄어쓰기, 동의어, 어순, 패러프레이즈는 관대하게 본다 — 의미가 통하면 정답이다.',
+            '핵심 개념의 정오만 엄격하게 본다. 사소한 표기 차이로 깎지 마라.',
             '한국어 1~2문장 reason을 준다. 반드시 JSON만 반환한다.',
           ].join(' '),
         }],
@@ -119,17 +121,20 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
 }
 
 export async function gradeCardAnswer(card: GradeableCard, learnerAnswer: string, options: GraderOptions = {}): Promise<GradedAnswer> {
-  if (card.type === 'mcq') return exactGrade(card, learnerAnswer, 'mcq')
-
   const apiKey = options.apiKey ?? config.grader.apiKey
   const model = options.model ?? config.grader.model
   const timeoutMs = options.timeoutMs ?? config.grader.timeoutMs
-  if (apiKey) {
+  if (!apiKey) return lenientFallback()
+
+  const opts = { apiKey, model, timeoutMs }
+  try {
+    return await llmGrade(card, learnerAnswer, opts)
+  } catch {
+    // 일시적 장애일 수 있으니 1회 재시도 후에도 실패하면 관대 폴백(오답 강등 금지).
     try {
-      return await llmGrade(card, learnerAnswer, { apiKey, model, timeoutMs })
+      return await llmGrade(card, learnerAnswer, opts)
     } catch {
-      // LLM 장애는 학습을 막지 않는다. 결정적 exact 폴백으로 강등.
+      return lenientFallback()
     }
   }
-  return exactGrade(card, learnerAnswer, 'exact')
 }
