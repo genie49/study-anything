@@ -5,7 +5,7 @@ import { getTracks, getPlan, getSession, importZip, patchTrack, deleteTrack, sub
 import { summarizeToday, type TodayRow, type TodaySummary } from './today'
 import { S_Login, S_TrackList, S_Empty, S_Dashboard, S_Edit } from './screens/home'
 import { S_Upload, S_ExamDate } from './screens/upload'
-import { S_Concept, S_Quiz, S_Grade, S_Summary } from './screens/session'
+import { S_Concept, S_Quiz, S_QuizMcq, S_Grade, S_Summary } from './screens/session'
 import { S_Today, S_Stats, S_Settings } from './screens/tabs'
 
 type Screen =
@@ -346,7 +346,14 @@ export default function App() {
         if (fb.sufficient && currentItem.conceptId) setPassedConceptIds((prev) => new Set(prev).add(currentItem.conceptId))
         return fb
       } : undefined} />
-      case 'quiz': return <S_Quiz key={`${currentItem?.stateId ?? 'demo'}:${sessionIndex}`} item={currentItem} done={done} total={totalItems} submitting={submitPending} error={submitError} onClose={() => setScreen('dashboard')} onSubmit={(answer) => { void submitCurrentAnswer(answer) }} onSuspend={hasBackend && selected && currentItem ? () => { void suspendCurrentCard() } : undefined} />
+      case 'quiz': {
+        const quizKey = `${currentItem?.stateId ?? 'demo'}:${sessionIndex}`
+        const quizProps = { key: quizKey, item: currentItem, done, total: totalItems, submitting: submitPending, error: submitError, onClose: () => setScreen('dashboard'), onSubmit: (answer: string) => { void submitCurrentAnswer(answer) }, onSuspend: hasBackend && selected && currentItem ? () => { void suspendCurrentCard() } : undefined }
+        // mcq는 보기 선택형, 그 외(cloze·qa·application)는 서술 입력형.
+        return currentItem?.type === 'mcq' && currentItem.distractors.length > 0
+          ? <S_QuizMcq {...quizProps} />
+          : <S_Quiz {...quizProps} />
+      }
       case 'grade': return <S_Grade answerResult={answerResult ?? undefined} done={done} total={totalItems} result="partial" onClose={() => setScreen('dashboard')} onNext={nextSessionStep} onSuspend={hasBackend && selected && currentItem ? () => { void suspendCurrentCard() } : undefined} />
       case 'summary': return <S_Summary results={sessionResults} completed={sessionResults.length || undefined} correct={sessionResults.filter((r) => r.correct).length || undefined} onReviewAgain={hasAgainReview ? startAgainReview : undefined} onDone={() => setScreen('dashboard')} />
       default: return homeView()

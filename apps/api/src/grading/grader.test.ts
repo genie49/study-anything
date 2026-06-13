@@ -15,18 +15,38 @@ describe('gradeCardAnswer', () => {
     expect(r.correct).toBe(true)
   })
 
-  it('mcq도 LLM으로 채점하며 선택지를 전달한다', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
-      candidates: [{ content: { parts: [{ text: JSON.stringify({ score: 1, reason: '정답 보기를 골랐어요.' }) }] } }],
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+  it('mcq 정답 보기 선택 시 LLM 없이 동등비교로 정답 처리', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     const r = await gradeCardAnswer({ type: 'mcq', answer: 'A', distractors: ['B', 'C'], explanation: 'e' }, 'A', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
-    expect(r.mode).toBe('llm')
+    expect(r.mode).toBe('mcq')
     expect(r.grade).toBe('good')
-    const sent = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)
-    const payload = JSON.parse(sent.contents[0].parts[0].text)
-    expect(payload.options).toEqual(['A', 'B', 'C'])
+    expect(r.correct).toBe(true)
+    expect(r.score).toBe(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('mcq 오답 보기 선택 시 LLM 없이 동등비교로 오답 처리', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await gradeCardAnswer({ type: 'mcq', answer: 'A', distractors: ['B', 'C'], explanation: 'e' }, 'B', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
+    expect(r.mode).toBe('mcq')
+    expect(r.grade).toBe('again')
+    expect(r.correct).toBe(false)
+    expect(r.score).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('mcq 동등비교는 앞뒤 공백을 무시한다', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await gradeCardAnswer({ type: 'mcq', answer: '정답 보기', distractors: ['오답'], explanation: 'e' }, '  정답 보기  ', { apiKey: 'k', model: 'm', timeoutMs: 1000 })
+    expect(r.mode).toBe('mcq')
+    expect(r.correct).toBe(true)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('Gemini JSON 점수를 grade로 매핑', async () => {

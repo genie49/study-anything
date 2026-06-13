@@ -5,7 +5,7 @@
 import { config } from '../config.js'
 import type { Grade } from '../scheduler/memory.js'
 
-export type GraderMode = 'llm' | 'fallback'
+export type GraderMode = 'llm' | 'fallback' | 'mcq'
 
 export type GradeableCard = {
   type?: string
@@ -41,6 +41,19 @@ function clampScore(n: unknown): number {
   return Math.max(0, Math.min(1, v))
 }
 
+// mcq는 클릭 선택이라 오타가 없다 → 선택지 동등비교로 즉시·무료·완전 일관하게 채점(LLM 호출 안 함).
+// runtime-grading.md: card.type이 라우팅을 결정한다(mcq=동등비교, 그 외=LLM).
+function mcqGrade(card: GradeableCard, learnerAnswer: string): GradedAnswer {
+  const correct = (learnerAnswer ?? '').trim() === (card.answer ?? '').trim()
+  return {
+    score: correct ? 1 : 0,
+    grade: correct ? 'good' : 'again',
+    correct,
+    mode: 'mcq',
+    reason: correct ? '정답 보기를 골랐어요.' : `오답이에요. 정답은 「${card.answer ?? ''}」예요.`,
+  }
+}
+
 // LLM을 쓸 수 없을 때(키 부재·연속 실패) 관대 폴백 — 오답으로 처리하지 않는다.
 function lenientFallback(): GradedAnswer {
   return {
@@ -65,10 +78,6 @@ function parseGeminiJson(body: unknown): { score: number; reason: string } {
 
 async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Required<GraderOptions>): Promise<GradedAnswer> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.model)}:generateContent?key=${encodeURIComponent(opts.apiKey)}`
-  // mcq는 선택지(정답+오답)를 함께 줘 LLM이 보기 중 무엇을 골랐는지 판단할 수 있게 한다.
-  const options = card.type === 'mcq' && Array.isArray(card.distractors)
-    ? [card.answer ?? '', ...card.distractors].filter(Boolean)
-    : undefined
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -83,7 +92,6 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
             type: card.type ?? 'qa',
             question: card.prompt ?? '',
             referenceAnswer: card.answer ?? '',
-            options,
             explanation: card.explanation ?? '',
             rubric: Array.isArray(card.grading?.rubric) ? card.grading?.rubric : [],
             learnerAnswer,
@@ -106,7 +114,7 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
         parts: [{
           text: [
             '너는 학습앱의 공정한 채점관이다.',
-            '질문, 참조정답, (mcq면)선택지, 해설, 선택 채점기준, 학습자답변을 보고 0~1 점수를 매긴다.',
+            '질문, 참조정답, 해설, 선택 채점기준, 학습자답변을 보고 0~1 점수를 매긴다.',
             '철자, 띄어쓰기, 동의어, 어순, 패러프레이즈는 관대하게 본다 — 의미가 통하면 정답이다.',
             '핵심 개념의 정오만 엄격하게 본다. 사소한 표기 차이로 깎지 마라.',
             '한국어 1~2문장 reason을 준다. 반드시 JSON만 반환한다.',
@@ -121,6 +129,9 @@ async function llmGrade(card: GradeableCard, learnerAnswer: string, opts: Requir
 }
 
 export async function gradeCardAnswer(card: GradeableCard, learnerAnswer: string, options: GraderOptions = {}): Promise<GradedAnswer> {
+  // mcq는 LLM을 거치지 않고 선택지 동등비교로 즉시 채점한다.
+  if (card.type === 'mcq') return mcqGrade(card, learnerAnswer)
+
   const apiKey = options.apiKey ?? config.grader.apiKey
   const model = options.model ?? config.grader.model
   const timeoutMs = options.timeoutMs ?? config.grader.timeoutMs
