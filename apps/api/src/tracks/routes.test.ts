@@ -144,9 +144,9 @@ describe('POST /tracks/:id/concept/:conceptId/explain — 자기설명 피드백
     expect(j.feedback.feedback.length).toBeGreaterThan(0)
     expect(j.feedback.mode).toBe('skipped') // 테스트 환경엔 LLM 키 없음 → 폴백(통과 처리)
 
-    // 폴백 통과(mode:'skipped')는 진짜 통과가 아니므로 게이트를 영구 해제하지 않는다.
+    // 통과(sufficient)하면 폴백이라도 영구 저장 — 한번 한 개념은 다시 게이트가 걸리지 않는다.
     const after = await getDb().collection('concepts').findOne({ _id: new ObjectId(cid) })
-    expect(after?.selfExplainedAt).toBeFalsy()
+    expect(after?.selfExplainedAt).toBeInstanceOf(Date)
   })
 
   it('LLM 통과(mode:llm)면 selfExplainedAt 기록 + 세션이 conceptPassed=true 노출', async () => {
