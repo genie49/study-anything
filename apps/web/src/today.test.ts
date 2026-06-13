@@ -7,7 +7,7 @@ const track = (id: string): Track => ({ id, trackSlug: id, title: id, examDate: 
 const plan = (p: Partial<TrackPlan> & { health: HealthState; todayTotal: number }): TrackPlan => ({
   examSet: true, daysLeft: 30, suspendNew: false, total: 10, mastered: 0, progressPct: 0,
   studied: 0, studiedPct: 0,
-  todayNew: 0, todayReview: 0, estMinutes: 0, backlog: 0, newRemaining: 0, feasible: true,
+  todayNew: 0, todayReview: 0, estMinutes: 0, backlog: 0, newRemaining: 0, feasible: true, recommended: false,
   ...p,
 })
 const row = (id: string, p: Partial<TrackPlan> & { health: HealthState; todayTotal: number }): TodayRow =>

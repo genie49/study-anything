@@ -2,6 +2,7 @@
 // learning-algorithm-detail.md §5.5·§7. DB 비의존(상태 배열을 받음) → 단위테스트 가능.
 import { retrievability, targetRetention, daysBetween, requiredTotalSessions } from './memory.js'
 import { healthState, feasibility, type HealthState } from './health.js'
+import { batchSplit, drillNewRatio } from './session-order.js'
 
 // cardStates 한 행의 스케줄 관련 필드(DB 형태와 무관한 최소 표면).
 export type CardStateLike = {
@@ -40,6 +41,7 @@ export type TrackPlan = {
   backlog: number           // 연체
   newRemaining: number
   feasible: boolean
+  recommended: boolean      // 정상 할당량이 0이라 추천 배치로 채웠는지(세션도 같은 배치를 내준다)
 }
 
 // 졸업(숙달) 단계는 session.ts가 'maintaining'으로 기록한다. 과거 별칭도 방어적으로 포함.
@@ -101,8 +103,21 @@ export function computeTrackPlan(states: CardStateLike[], opts: PlanOptions): Tr
   }
 
   // 복습 먼저 용량을 채우고, 남은 용량만큼 신규.
-  const todayReview = Math.min(dueReview.length, capacityPerDay)
-  const todayNew = Math.min(newRemaining, newPerDay, Math.max(0, capacityPerDay - todayReview))
+  let todayReview = Math.min(dueReview.length, capacityPerDay)
+  let todayNew = Math.min(newRemaining, newPerDay, Math.max(0, capacityPerDay - todayReview))
+
+  // 정상 할당량이 0이지만 도입할 신규가 남아 있으면(신규 중단 상태) 추천 배치로 채워 진도를 잇는다.
+  // 신규가 없으면(이미 푼 미도래 복습뿐) 재출제하지 않는다 — 그건 명시적 '추가 학습' 몫.
+  // 다지기 정도(숙달비율)로 신규 비율을 정하고, 세션도 동일 배치를 내준다(recommended 플래그).
+  const nonNewCount = active.filter((s) => !isNew(s)).length
+  let recommended = false
+  if (examSet && todayReview + todayNew === 0 && newRemaining > 0) {
+    const split = batchSplit(nonNewCount, newRemaining, capacityPerDay, drillNewRatio(mastered, studied))
+    todayReview = split.review
+    todayNew = split.fresh
+    recommended = todayReview + todayNew > 0
+  }
+
   const todayTotal = todayReview + todayNew
   const estMinutes = Math.round((todayTotal * secPerRetrieval) / 60)
 
@@ -119,6 +134,7 @@ export function computeTrackPlan(states: CardStateLike[], opts: PlanOptions): Tr
     todayNew, todayReview, todayTotal, estMinutes,
     backlog, newRemaining,
     feasible: feas.feasible,
+    recommended,
   }
 }
 

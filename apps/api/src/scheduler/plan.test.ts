@@ -75,4 +75,33 @@ describe('computeTrackPlan', () => {
     const states: CardStateLike[] = [mkNew(), { ...mkNew(), archived: true }]
     expect(computeTrackPlan(states, { now: NOW, examDate: EXAM }).total).toBe(1)
   })
+
+  it('시험 임박해 정상 할당량 0이어도 추천 배치로 채움(todayTotal>0·recommended)', () => {
+    // 신규 500 + 시험 내일 → infeasible·suspendNew. 복습 due 없음 → 정상 할당량 0 → 추천 폴백.
+    const soon = new Date(NOW.getTime() + 86_400_000) // 내일
+    const p = computeTrackPlan(Array.from({ length: 500 }, mkNew), { now: NOW, examDate: soon, capacityPerDay: 40 })
+    expect(p.suspendNew).toBe(true)        // 건강 상태는 그대로(정직)
+    expect(p.recommended).toBe(true)
+    expect(p.todayTotal).toBe(40)          // 용량만큼 추천
+    expect(p.todayNew).toBe(40)            // 복습 없음 → 전부 신규
+    expect(p.estMinutes).toBeGreaterThan(0)
+  })
+
+  it('추천 배치는 다지기 정도(숙달비율)로 신규·복습을 나눔', () => {
+    const soon = new Date(NOW.getTime() + 86_400_000)
+    // 신규 100 + 졸업(maintaining) 10(미도래) → mastered/studied=1 → 신규비율 0.9.
+    const mastered10 = Array.from({ length: 10 }, () => mkMastered())
+    const states = [...Array.from({ length: 100 }, mkNew), ...mastered10]
+    const p = computeTrackPlan(states, { now: NOW, examDate: soon, capacityPerDay: 40 })
+    expect(p.recommended).toBe(true)
+    expect(p.todayNew).toBe(36)            // round(40*0.9)
+    expect(p.todayReview).toBe(4)          // 나머지
+    expect(p.todayTotal).toBe(40)
+  })
+
+  it('시험 미설정이면 추천 폴백 없음(todayTotal 0 유지)', () => {
+    const p = computeTrackPlan(Array.from({ length: 50 }, mkNew), { now: NOW, examDate: null })
+    expect(p.recommended).toBe(false)
+    expect(p.todayTotal).toBe(0)
+  })
 })
