@@ -80,8 +80,9 @@ export async function getSessionQueue(
   })
 
   let picked: StateDoc[]
-  if (opts.extra) {
-    // 추가 학습: 다지기 정도(숙달 비율)가 좋을수록 신규를 더 많이(최대 90%) 선형 배분한다.
+  if (opts.extra || plan.recommended) {
+    // 추가 학습 또는 추천 배치(정상 할당량 0): 다지기 정도(숙달 비율)가 좋을수록 신규를 더 많이(최대
+    // 90%) 선형 배분한다. recommended일 때 plan의 todayNew/Review와 같은 배치를 내준다(화면 숫자 일치).
     // reviewAll은 dueAt 오름차순(가장 급한 복습 먼저), 한 세션 = capacityPerDay 배치.
     const reviewAll = states.filter((s) => !isNewState(s))
     const newAll = states.filter(isNewState)

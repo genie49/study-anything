@@ -14,16 +14,21 @@ export function drillNewRatio(mastered: number, studied: number, max = 0.9): num
   return Math.max(0, Math.min(max, score * max))
 }
 
-// 추가 학습 배치 — 신규 비율(newRatio)만큼 신규를 우선 확보하고, 한쪽이 모자라면 다른 쪽이 빈 슬롯을
-// 채워 용량을 낭비하지 않는다. 복습이 앞(우선순위↑), 신규가 뒤.
+// 배치 분할(카운트만) — 신규 비율(newRatio)만큼 신규를 우선 확보하고, 한쪽이 모자라면 다른 쪽이
+// 빈 슬롯을 채운다. 화면 표시(plan)와 실제 카드 선택(reserveBatch)이 같은 수를 쓰도록 공유한다.
+export function batchSplit(reviewCount: number, freshCount: number, capacity: number, newRatio: number): { review: number; fresh: number } {
+  if (capacity <= 0) return { review: 0, fresh: 0 }
+  const newQuota = Math.round(capacity * newRatio)
+  const fresh = Math.min(freshCount, Math.max(newQuota, capacity - reviewCount))
+  const review = Math.min(reviewCount, capacity - fresh)
+  return { review, fresh }
+}
+
+// 추가 학습/추천 배치 — batchSplit이 정한 수만큼 복습(앞·우선순위↑)·신규(뒤)를 실제로 고른다.
 // review는 우선순위순(dueAt↑)으로 정렬돼 들어온다고 가정 → 가장 급한 복습부터 채운다.
 export function reserveBatch<T>(review: T[], fresh: T[], capacity: number, newRatio: number): T[] {
-  if (capacity <= 0) return []
-  const newQuota = Math.round(capacity * newRatio)
-  // 복습이 적으면 신규가 그만큼 더 가져간다(빈 슬롯 방지).
-  const freshPick = fresh.slice(0, Math.max(newQuota, capacity - review.length))
-  const reviewPick = review.slice(0, capacity - freshPick.length)
-  return [...reviewPick, ...freshPick]
+  const { review: r, fresh: f } = batchSplit(review.length, fresh.length, capacity, newRatio)
+  return [...review.slice(0, r), ...fresh.slice(0, f)]
 }
 
 // 우선순위순 입력을 받아, 직전 카드와 개념·유형이 겹치지 않는 최상위 우선 카드를

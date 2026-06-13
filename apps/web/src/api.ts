@@ -13,6 +13,7 @@ export type TrackPlan = {
   studied: number; studiedPct: number
   todayNew: number; todayReview: number; todayTotal: number; estMinutes: number
   backlog: number; newRemaining: number; feasible: boolean
+  recommended: boolean   // 정상 할당량 0이라 추천 배치로 채운 상태(오늘의 학습이 권장량)
 }
 export type Snapshot = { day: string; health: HealthState; avgRExam: number | null; mastered: number; total: number; backlog: number }
 export type GradeDist = { again: number; hard: number; good: number; easy: number }

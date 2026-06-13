@@ -226,7 +226,10 @@ function RealDashboard({ track, resumable = false, onResume, onStart, onEdit, on
 
             {/* 오늘의 학습 — 실제 플랜 */}
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: WF.ink2, marginBottom: 9, fontFamily: WF.mono, letterSpacing: '0.3px' }}>오늘의 학습</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: WF.ink2, marginBottom: 9, fontFamily: WF.mono, letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span>오늘의 학습</span>
+                {plan.recommended && <Chip tone="neutral">추천</Chip>}
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 10 }}>
                 <span>개념 {plan.todayNew} · 다지기 {plan.todayReview}</span>
                 <span style={{ color: WF.ink2, fontFamily: WF.mono, fontSize: 12 }}>예상 {plan.estMinutes}분</span>

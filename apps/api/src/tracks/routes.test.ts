@@ -95,22 +95,30 @@ describe('GET /tracks/:id/session', () => {
     expect(session.items[0].conceptBodyMd).toBe('#')
   })
 
-  it('실현 어려움(신규 중단)이면 일반 세션은 0이지만 extra=1은 학습 카드를 내준다', async () => {
+  it('실현 어려움(신규 중단)이라도 신규가 남으면 일반 세션이 추천 배치로 진도를 잇는다', async () => {
     const b = bundle()
     b.manifest.trackSlug = '추가학습트랙'; b.manifest.title = '추가학습트랙'
-    b.examDate = '2020-01-01' // 과거 시험일 → 실현 불가 → suspendNew → 일반 todayTotal=0
+    b.examDate = '2020-01-01' // 과거 시험일 → 실현 불가 → suspendNew
     const { trackId } = await importBundle(USER, b)
     const auth = { authorization: await bearer(USER) }
 
+    // 정상 할당량이 0이어도 도입할 신규가 남아 있으면 추천 배치로 채워 일반 세션이 카드를 내준다.
     const normal = await app.request(`/tracks/${trackId}/session`, { headers: auth })
-    const n = await normal.json() as { session: { total: number } }
-    expect(n.session.total).toBe(0) // 신규 중단 + 복습 없음 → 학습할 게 없음
+    const n = await normal.json() as { session: { total: number; items: { mode: string }[] } }
+    expect(n.session.total).toBeGreaterThan(0)
+    expect(n.session.items[0].mode).toBe('new')
+
+    // plan도 추천 배치를 안내(todayTotal>0, recommended)
+    const planRes = await app.request(`/tracks/${trackId}/plan`, { headers: auth })
+    const { plan } = await planRes.json() as { plan: { todayTotal: number; recommended: boolean; suspendNew: boolean } }
+    expect(plan.todayTotal).toBeGreaterThan(0)
+    expect(plan.recommended).toBe(true)
+    expect(plan.suspendNew).toBe(true) // 건강 상태는 정직하게 유지
 
     const extra = await app.request(`/tracks/${trackId}/session?extra=1`, { headers: auth })
     expect(extra.status).toBe(200)
-    const e = await extra.json() as { session: { total: number; items: { mode: string }[] } }
-    expect(e.session.total).toBeGreaterThan(0) // 캡·suspendNew 무시하고 카드 제공
-    expect(e.session.items[0].mode).toBe('new')
+    const e = await extra.json() as { session: { total: number } }
+    expect(e.session.total).toBeGreaterThan(0)
   })
 })
 
