@@ -10,7 +10,8 @@ const mkReview = (dueOffsetDays: number, lapses = 0): CardStateLike => ({
   stage: 'review', S: 5, D: 0.3, reps: 3, lapses,
   dueAt: new Date(NOW.getTime() + dueOffsetDays * 86_400_000),
 })
-const mkMastered = (): CardStateLike => ({ stage: 'mastered', S: 40, D: 0.2, dueAt: NOW, reps: 6, lapses: 0 })
+// 스케줄러가 실제로 쓰는 졸업 단계명은 'maintaining'이다(session.ts). 숙달 카운트는 이 이름을 봐야 한다.
+const mkMastered = (): CardStateLike => ({ stage: 'maintaining', S: 40, D: 0.2, dueAt: NOW, reps: 6, lapses: 0 })
 
 describe('computeTrackPlan', () => {
   it('갓 import한 트랙(전부 신규) — 신규만 오늘 도입, 복습·백로그 0', () => {

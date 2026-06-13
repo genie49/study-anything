@@ -5,7 +5,7 @@ import { healthState, feasibility, type HealthState } from './health.js'
 
 // cardStates 한 행의 스케줄 관련 필드(DB 형태와 무관한 최소 표면).
 export type CardStateLike = {
-  stage: string            // 'new' | 'learning' | 'review' | 'mastered' | 'maintain' | ...
+  stage: string            // 'new' | 'acquiring' | 'consolidating' | 'maintaining'(졸업/숙달)
   S: number
   D: number
   dueAt: Date
@@ -42,7 +42,8 @@ export type TrackPlan = {
   feasible: boolean
 }
 
-const MASTERED_STAGES = new Set(['mastered', 'maintain'])
+// 졸업(숙달) 단계는 session.ts가 'maintaining'으로 기록한다. 과거 별칭도 방어적으로 포함.
+const MASTERED_STAGES = new Set(['maintaining', 'mastered', 'maintain'])
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())

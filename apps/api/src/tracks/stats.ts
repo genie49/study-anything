@@ -20,7 +20,8 @@ export type TrackStats = {
   last7: DayCount[]            // 오늘 포함 최근 7일(로컬 자정 기준), 과거→현재
 }
 
-const MASTERED_STAGES = new Set(['mastered', 'maintain'])
+// 졸업(숙달) 단계는 session.ts가 'maintaining'으로 기록한다. 과거 별칭도 방어적으로 포함.
+const MASTERED_STAGES = new Set(['maintaining', 'mastered', 'maintain'])
 
 function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
