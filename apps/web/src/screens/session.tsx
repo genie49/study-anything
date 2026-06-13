@@ -219,21 +219,56 @@ export function S_Quiz({ item, done = 24, total = 42, submitting = false, error,
   )
 }
 
-// 5b. 다지기 (mcq)
-export function S_QuizMcq({ onClose }: { onClose?: () => void }) {
+// 보기 순서를 마운트 시 1회 무작위로 섞는다(Fisher–Yates). 재방문 시 위치가 달라져 위치 암기를 막는다.
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j]!, a[i]!]
+  }
+  return a
+}
+
+// 5b. 다지기 (mcq) — 정답+오답을 보기로 띄우고, 고른 보기를 즉시 제출(클릭 즉시 채점).
+export function S_QuizMcq({ item, done = 24, total = 42, submitting = false, error, onClose, onSubmit, onSuspend }: {
+  item?: SessionItem; done?: number; total?: number; submitting?: boolean; error?: string | null; onClose?: () => void; onSubmit?: (answer: string) => void; onSuspend?: () => void
+}) {
+  // 정답+오답을 한 번만 섞어 고정(리렌더로 위치가 바뀌지 않게 useState initializer 사용).
+  const [options] = useState(() => shuffled(item ? [item.answer, ...item.distractors] : ['will have p.p.', 'will be p.p.', 'have been ~ing', 'had p.p.']))
+  const [picked, setPicked] = useState<string | null>(null)
+  const choose = (o: string) => {
+    if (submitting || picked !== null) return
+    setPicked(o)
+    onSubmit?.(o)
+  }
   return (
     <Screen>
-      <SessHead done={24} total={42} onClose={onClose} />
+      <SessHead done={done} total={total} onClose={onClose} />
       <Body gap={0} style={{ paddingTop: 22 }}>
-        <Chip tone="neutral">다지기 · mcq</Chip>
-        <div style={{ fontSize: 20, fontWeight: 600, marginTop: 24, lineHeight: 1.5 }}>미래완료의 올바른 형태는?</div>
+        <Chip tone="neutral">다지기 · {item?.conceptTitle ?? 'mcq'}</Chip>
+        <div style={{ fontSize: 20, fontWeight: 600, marginTop: 24, lineHeight: 1.5 }}>{item?.prompt ?? '미래완료의 올바른 형태는?'}</div>
         <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {['will have p.p.', 'will be p.p.', 'have been ~ing', 'had p.p.'].map((o, i) => (
-            <div key={o} style={{ border: `1px solid ${WF.line}`, borderRadius: 11, padding: '14px 16px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3 }}>{String.fromCharCode(65 + i)}</span>{o}
-            </div>
-          ))}
+          {options.map((o, i) => {
+            const active = picked === o
+            return (
+              <div
+                key={o}
+                onClick={() => choose(o)}
+                style={{
+                  border: `1px solid ${active ? WF.ink : WF.line}`, borderRadius: 11, padding: '14px 16px', fontSize: 15,
+                  display: 'flex', alignItems: 'center', gap: 12, lineHeight: 1.5,
+                  cursor: submitting || picked !== null ? 'default' : 'pointer',
+                  background: active ? WF.fill1 : WF.paper, opacity: picked !== null && !active ? 0.55 : 1,
+                }}
+              >
+                <span style={{ fontFamily: WF.mono, fontSize: 12, color: WF.ink3, flex: '0 0 auto' }}>{String.fromCharCode(65 + i)}</span>{o}
+              </div>
+            )
+          })}
         </div>
+        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: TONE.danger.c, lineHeight: 1.45 }}>{error}</div>}
+        <HintReveal hint={item ? item.hint : null} />
+        <SuspendLink onSuspend={onSuspend} />
       </Body>
     </Screen>
   )
