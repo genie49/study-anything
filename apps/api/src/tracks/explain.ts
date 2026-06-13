@@ -22,11 +22,14 @@ export async function getExplanationFeedback(
     bodyMd: concept.bodyMd as string | undefined,
     elaboration: concept.elaboration as string | undefined,
   }, explanation)
-  // 다지기 게이트 통과 영속화 — LLM이 실제로 통과 판정한 경우에만 기록한다.
-  // 키 미설정/LLM 장애 폴백(mode:'skipped', sufficient:true)은 진짜 통과가 아니므로 마킹하지 않는다.
-  // → 일시 장애로 영구 통과가 찍혀 게이트가 무력화되는 것을 막는다(다음 세션에 다시 게이트 적용).
-  if (feedback.mode === 'llm' && feedback.sufficient && !concept.selfExplainedAt) {
-    await db.collection('concepts').updateOne({ _id, userId, trackId: _trackId }, { $set: { selfExplainedAt: now } })
+  // 다지기 게이트 통과 영속화 — 한번 통과(sufficient)한 개념은 영구 기록해 다시 게이트가 걸리지 않게 한다.
+  // LLM 장애 폴백(mode:'skipped')이라도 학습자가 비어있지 않은 자기설명을 제출하고 통과했으면 인정한다
+  // (라우트가 빈 설명을 막는다). selfExplainedMode로 검증 여부를 남겨 추후 품질 구분에 쓴다.
+  if (feedback.sufficient && !concept.selfExplainedAt) {
+    await db.collection('concepts').updateOne(
+      { _id, userId, trackId: _trackId },
+      { $set: { selfExplainedAt: now, selfExplainedMode: feedback.mode } },
+    )
   }
   return feedback
 }
