@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb'
 import { getDb } from '../db/mongo.js'
 import { gradeCardAnswer, type GraderMode } from '../grading/grader.js'
 import { computeTrackPlan } from '../scheduler/plan.js'
-import { interleaveSession } from '../scheduler/session-order.js'
+import { interleaveSession, reserveBatch, drillNewRatio } from '../scheduler/session-order.js'
 import { daysBetween, isGraduated, retrievability, schedule, type Grade } from '../scheduler/memory.js'
 
 export type SessionItem = {
@@ -81,10 +81,12 @@ export async function getSessionQueue(
 
   let picked: StateDoc[]
   if (opts.extra) {
-    // dueAt 오름차순(연체→곧 도래→미도래) 복습 먼저, 그다음 신규. 한 세션 = capacityPerDay 배치.
+    // 추가 학습: 다지기 정도(숙달 비율)가 좋을수록 신규를 더 많이(최대 90%) 선형 배분한다.
+    // reviewAll은 dueAt 오름차순(가장 급한 복습 먼저), 한 세션 = capacityPerDay 배치.
     const reviewAll = states.filter((s) => !isNewState(s))
     const newAll = states.filter(isNewState)
-    picked = [...reviewAll, ...newAll].slice(0, capacityPerDay)
+    const newRatio = drillNewRatio(plan.mastered, plan.studied)
+    picked = reserveBatch(reviewAll, newAll, capacityPerDay, newRatio)
   } else {
     const dueReview = states.filter((s) => !isNewState(s) && (s.dueAt?.getTime() ?? 0) <= now.getTime()).slice(0, plan.todayReview)
     const fresh = states.filter(isNewState).slice(0, plan.todayNew)

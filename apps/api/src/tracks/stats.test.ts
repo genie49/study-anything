@@ -18,8 +18,8 @@ describe('computeTrackStats', () => {
     expect(s.last7.every((d) => d.count === 0)).toBe(true)
   })
 
-  it('진행률 = mastered/total, archived 제외', () => {
-    const states = [st('mastered'), st('maintain'), st('review'), st('new'), { ...st('mastered'), archived: true }]
+  it('진행률 = mastered/total, archived 제외 (졸업 단계명은 maintaining)', () => {
+    const states = [st('maintaining'), st('maintaining'), st('review'), st('new'), { ...st('maintaining'), archived: true }]
     const s = computeTrackStats(states, [], NOW)
     expect(s.total).toBe(4)        // archived 1개 제외
     expect(s.mastered).toBe(2)

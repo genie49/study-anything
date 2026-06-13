@@ -1,6 +1,6 @@
 // 세션 인터리빙 — 불변식(순열 보존·인접 분리·우선순위 보존). 매직 순서 아님.
 import { describe, it, expect } from 'vitest'
-import { interleaveSession, type Interleavable } from './session-order.js'
+import { interleaveSession, reserveBatch, drillNewRatio, type Interleavable } from './session-order.js'
 
 type Item = Interleavable & { id: string }
 const mk = (id: string, conceptId: string, type = 'qa'): Item => ({ id, conceptId, type })
@@ -50,5 +50,70 @@ describe('interleaveSession', () => {
     const out = interleaveSession(input)
     expect(out).toHaveLength(3)
     expect(sameMultiset(out, input)).toBe(true)
+  })
+})
+
+describe('drillNewRatio (다지기 정도 → 신규 비율, 0~90% 선형)', () => {
+  it('숙달비율 1 → 최대 90%', () => {
+    expect(drillNewRatio(40, 40)).toBeCloseTo(0.9)
+  })
+  it('숙달비율 0 → 0% (복습에 집중)', () => {
+    expect(drillNewRatio(0, 40)).toBe(0)
+  })
+  it('선형: 숙달비율 0.5 → 45%', () => {
+    expect(drillNewRatio(20, 40)).toBeCloseTo(0.45)
+  })
+  it('아직 푼 게 없으면(studied=0) 제약 없음 → 최대', () => {
+    expect(drillNewRatio(0, 0)).toBeCloseTo(0.9)
+  })
+  it('실데이터(38/40) ≈ 85.5%', () => {
+    expect(drillNewRatio(38, 40)).toBeCloseTo(0.855)
+  })
+})
+
+describe('reserveBatch (추가 학습 — 신규 비율 동적)', () => {
+  const R = (n: number) => Array.from({ length: n }, (_, i) => `r${i}`)
+  const N = (n: number) => Array.from({ length: n }, (_, i) => `n${i}`)
+
+  it('비율 0.5 — 신규 절반', () => {
+    const out = reserveBatch(R(40), N(477), 40, 0.5)
+    expect(out).toHaveLength(40)
+    expect(out.filter((x) => x.startsWith('n'))).toHaveLength(20)
+  })
+
+  it('비율 0.855 — 신규 ~34개(round)', () => {
+    const out = reserveBatch(R(40), N(477), 40, 0.855)
+    expect(out.filter((x) => x.startsWith('n'))).toHaveLength(34)
+    expect(out.filter((x) => x.startsWith('r'))).toHaveLength(6)
+  })
+
+  it('비율 0 — 복습만(신규 0)', () => {
+    const out = reserveBatch(R(40), N(477), 40, 0)
+    expect(out.filter((x) => x.startsWith('n'))).toHaveLength(0)
+    expect(out.filter((x) => x.startsWith('r'))).toHaveLength(40)
+  })
+
+  it('복습이 적으면 신규가 빈 슬롯을 더 채운다(슬롯 낭비 없음)', () => {
+    const out = reserveBatch(R(2), N(477), 40, 0.5)
+    expect(out).toHaveLength(40)
+    expect(out.filter((x) => x.startsWith('r'))).toHaveLength(2)
+    expect(out.filter((x) => x.startsWith('n'))).toHaveLength(38)
+  })
+
+  it('신규가 적으면 복습이 빈 슬롯을 채운다', () => {
+    const out = reserveBatch(R(40), N(5), 40, 0.9)
+    expect(out).toHaveLength(40)
+    expect(out.filter((x) => x.startsWith('n'))).toHaveLength(5)
+    expect(out.filter((x) => x.startsWith('r'))).toHaveLength(35)
+  })
+
+  it('복습이 앞, 신규가 뒤 — 우선순위 보존', () => {
+    const out = reserveBatch(R(10), N(10), 10, 0.5)
+    expect(out[0]).toBe('r0')
+    expect(out[out.length - 1]).toBe('n4')
+  })
+
+  it('합이 용량 미만이면 있는 것만', () => {
+    expect(reserveBatch(R(3), N(2), 40, 0.5)).toHaveLength(5)
   })
 })
