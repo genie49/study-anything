@@ -1,6 +1,6 @@
 // 세션 인터리빙 — 불변식(순열 보존·인접 분리·우선순위 보존). 매직 순서 아님.
 import { describe, it, expect } from 'vitest'
-import { interleaveSession, reserveBatch, drillNewRatio, type Interleavable } from './session-order.js'
+import { interleaveSession, reserveBatch, drillNewRatio, batchSplit, type Interleavable } from './session-order.js'
 
 type Item = Interleavable & { id: string }
 const mk = (id: string, conceptId: string, type = 'qa'): Item => ({ id, conceptId, type })
@@ -68,6 +68,18 @@ describe('drillNewRatio (다지기 정도 → 신규 비율, 0~90% 선형)', () 
   })
   it('실데이터(38/40) ≈ 85.5%', () => {
     expect(drillNewRatio(38, 40)).toBeCloseTo(0.855)
+  })
+})
+
+describe('batchSplit (카운트 분할 — plan 표시와 세션 선택 공유)', () => {
+  it('복습·신규 충분: 비율대로 분할', () => {
+    expect(batchSplit(40, 477, 40, 0.855)).toEqual({ review: 6, fresh: 34 })
+  })
+  it('복습 0: 전부 신규', () => {
+    expect(batchSplit(0, 500, 40, 0.9)).toEqual({ review: 0, fresh: 40 })
+  })
+  it('합이 용량 미만: 있는 것만', () => {
+    expect(batchSplit(3, 2, 40, 0.5)).toEqual({ review: 3, fresh: 2 })
   })
 })
 
