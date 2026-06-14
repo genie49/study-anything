@@ -84,7 +84,7 @@ export function S_Concept({ item, done = 0, total = 42, passed = false, onClose,
         </div>
         <div style={{ marginTop: 22 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>
-            개념을 자신의 언어로 설명해 보아요 <span style={{ color: WF.ink3, fontWeight: 400 }}>· 왜 그런가요?</span>
+            개념의 핵심을 설명해 보아요 <span style={{ color: WF.ink3, fontWeight: 400 }}>· 왜 그런가요?</span>
           </div>
           {demo ? (
             // 데모 전용 목업(백엔드 없을 때). 실제 학습 경로는 아래 인터랙티브 분기로 동작한다.
@@ -134,7 +134,7 @@ export function S_Concept({ item, done = 0, total = 42, passed = false, onClose,
         <div style={{ marginTop: 'auto', paddingTop: 16 }}>
           {gateActive && !canProceed && (
             <div style={{ fontSize: 12.5, color: WF.ink3, textAlign: 'center', marginBottom: 10, lineHeight: 1.5 }}>
-              먼저 개념을 자신의 언어로 설명하고 피드백을 통과하면 다지기를 시작할 수 있어요.
+              먼저 개념의 핵심을 설명하고 피드백을 통과하면 다지기를 시작할 수 있어요.
             </div>
           )}
           <Btn primary disabled={!canProceed} onClick={onNext}>다지기 시작 ›</Btn>
