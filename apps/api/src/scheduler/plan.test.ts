@@ -99,6 +99,22 @@ describe('computeTrackPlan', () => {
     expect(p.todayTotal).toBe(40)
   })
 
+  it('신규 중단(suspendNew) 상태에서 도래 복습이 소수 있어도 추천 배치가 용량을 채운다', () => {
+    // 사용자 D-0 버그 재현: 시험 임박(infeasible·suspendNew)인데 도래 복습이 딱 1개라
+    // 정상 할당량이 1로 잡혀 추천 폴백이 막히던 문제. 숙달이 높으면 신규로 진도를 이어야 한다.
+    const soon = new Date(NOW.getTime() + 86_400_000) // 내일 → infeasible
+    const states = [
+      ...Array.from({ length: 20 }, () => mkMastered()), // 숙달 20
+      mkReview(0),                                        // 도래 복습 1
+      ...Array.from({ length: 100 }, mkNew),             // 신규 100
+    ]
+    const p = computeTrackPlan(states, { now: NOW, examDate: soon, capacityPerDay: 40 })
+    expect(p.suspendNew).toBe(true)            // 건강 상태는 정직하게 유지
+    expect(p.recommended).toBe(true)           // 복습 1개에 막히지 않고 추천 배치 작동
+    expect(p.todayTotal).toBe(40)              // 1문항이 아니라 용량만큼 채움
+    expect(p.todayNew).toBeGreaterThan(0)      // 숙달이 높으니 신규로 진도
+  })
+
   it('시험 미설정이면 추천 폴백 없음(todayTotal 0 유지)', () => {
     const p = computeTrackPlan(Array.from({ length: 50 }, mkNew), { now: NOW, examDate: null })
     expect(p.recommended).toBe(false)

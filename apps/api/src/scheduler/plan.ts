@@ -106,12 +106,13 @@ export function computeTrackPlan(states: CardStateLike[], opts: PlanOptions): Tr
   let todayReview = Math.min(dueReview.length, capacityPerDay)
   let todayNew = Math.min(newRemaining, newPerDay, Math.max(0, capacityPerDay - todayReview))
 
-  // 정상 할당량이 0이지만 도입할 신규가 남아 있으면(신규 중단 상태) 추천 배치로 채워 진도를 잇는다.
+  // 신규 도입이 중단됐지만(suspendNew) 도입할 신규가 남아 있으면 추천 배치로 채워 진도를 잇는다.
+  // 도래 복습이 우연히 몇 개 있다고 막지 않는다 — 그러면 1~2문항짜리 빈약한 세션이 된다.
   // 신규가 없으면(이미 푼 미도래 복습뿐) 재출제하지 않는다 — 그건 명시적 '추가 학습' 몫.
-  // 다지기 정도(숙달비율)로 신규 비율을 정하고, 세션도 동일 배치를 내준다(recommended 플래그).
+  // 다지기 정도(숙달비율)로 신규 비율을 정하고(낮으면 복습 위주로 자기조절), 세션도 동일 배치를 내준다.
   const nonNewCount = active.filter((s) => !isNew(s)).length
   let recommended = false
-  if (examSet && todayReview + todayNew === 0 && newRemaining > 0) {
+  if (examSet && advice.suspendNew && newRemaining > 0) {
     const split = batchSplit(nonNewCount, newRemaining, capacityPerDay, drillNewRatio(mastered, studied))
     todayReview = split.review
     todayNew = split.fresh
